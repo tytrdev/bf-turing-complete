@@ -64,15 +64,31 @@ Build note: Golf/G.lean takes ~35 s and sets maxHeartbeats 1000000.
   `(by oi)` is postponed to the end and works.
 - Build takes ~65 s since auto-params (was 31 s). Run builds in the background with a time cap.
 
-## Elegant (`Elegant/Elegant.lean`)
-Started as the Golf proof with readable names (`Spec`, `Holds`, `ifFlag`, `incAt`, `dispatch`,
-`flush`, `carry`, `commit`, ...). Then: transitions are a structure `Act` (`sym next go left right`),
-and the flags between phases are named (`start → dispatched → flushed → shifted → committed`),
-so each phase lemma is one line and `body_spec` is plain composition.
-Next for Elegant:
-1. One "exactly one `ifFlag` in the list fires" lemma over `finRange`, replacing `flatMap_one` +
-   the `intro i _ h; have := Fin.val_ne_of_ne h; exact Spec.ifOff` bullets.
-2. Module doc + docstrings on each gadget; split into Gadgets / Compiler / Correctness files.
-3. Shorter `eval_eq` (the Part.ext with tr_eval/tr_eval_rev).
+## Elegant: redesign (agreed with Ty 2026-11-24)
+`Elegant/Elegant.lean` is currently just Golf with readable names (v0). Ty's verdict: renaming is not
+elegance. Replace it with a two-layer proof in which no offset arithmetic and no `omega` appear in
+the TM part.
+
+**Layer A: BF implements flag machines (generic, proved once).**
+- A flag type `F` with `[Fintype F] [DecidableEq F]` and a fixed layout `ι : F ↪ Fin w`; tape view
+  `Holds b P t`, where `P : ℤ → F → Prop` gives the flags of each block. The layout arithmetic lives
+  in one block lemma here and nowhere else.
+- Flag programs: `inductive FProg | set (f) | clr (f) | when (f) (body : List FProg) | shift (d : ℤ)`.
+  Compile with `set f = [-]+` and `clr f = [-]` at offset `ι f`. Both are idempotent and work on any
+  cell value, so they need **no side conditions**. `when f body = [ [-] body ]` at `ι f` runs the
+  body once if `f` was set; its only side condition is that the body leaves `f` clear.
+- Denotation `⟦p⟧ : (ℤ → F → Prop) → (ℤ → F → Prop)` (with `shift` re-basing), and a single
+  theorem: compiled code takes `Holds 0 P` to `Holds 0 ⟦p⟧ P`.
+
+**Layer B: flag machines implement TM0.**
+- `inductive Flag Γ Λ | sym (a : Γ) | state (q : Λ) | pendSym (a) | pendState (q) | left | right | run`
+  (blank has no `sym` flag, so blank cells are all zero). Disjointness of flags comes from
+  constructors being distinct, which `simp` handles: no `card Γ - 1`, `Fin.succ`, `E` equivs or 0/1 `Act`.
+- One step = for each state and symbol `when (state q) ...`; act writes pending flags; flush
+  pending symbol; carry pending state and `run` to the neighbour; commit. Lists come from
+  `Finset.univ.toList`. Correctness should be close to a case split on `M q a`.
+- Main loop `when`-style on `run`; then the `Respects` / `tr_eval` ending as before.
+Goal: each layer readable in one sitting. Size is secondary; compare against Golf (9629) afterwards.
+
 Then Exposition = Elegant plus prose, worked example, and a discussion of the statement's scope
 (TM0 vs partrec, two-sided tape, per-machine block code, right₀-only output, noncomputable compiler).
