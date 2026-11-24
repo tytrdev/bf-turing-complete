@@ -144,6 +144,7 @@ variable {F : Type*}
 
 
 /-- Flag programs over the flag type `F`. -/
+-- ANCHOR: FProg
 inductive FProg (F : Type*)
   | skip
   | set (f : F)
@@ -151,6 +152,7 @@ inductive FProg (F : Type*)
   | shift (d : ℤ)
   | seq (p q : FProg F)
   | when (f : F) (p : FProg F)
+-- ANCHOR_END: FProg
 
 /-- `p ⨾ q`: run `p`, then `q`. -/
 infixr:60 " ⨾ " => FProg.seq
@@ -159,6 +161,7 @@ namespace FProg
 
 /-- What a flag program does to the flag set. `when f p` clears `f` and runs `p` if `f` is set;
 it fails (`none`) if `p` sets `f` again, since the Brainfuck loop would then repeat. -/
+-- ANCHOR: den
 noncomputable def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
   | skip, P => some P
   | set f, P => some (insert (0, f) P)
@@ -168,6 +171,7 @@ noncomputable def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
   | when f p, P =>
     if (0, f) ∈ P then (p.den (P \ {(0, f)})).bind fun Q ↦ if (0, f) ∈ Q then none else some Q
     else some P
+-- ANCHOR_END: den
 
 @[simp] theorem den_skip (P : Set (ℤ × F)) : (skip : FProg F).den P = some P := rfl
 @[simp] theorem den_set (f : F) (P : Set (ℤ × F)) : (set f).den P = some (insert (0, f) P) := rfl
@@ -439,6 +443,7 @@ The proof of `compile_spec` is by induction on the program, with one short argum
 namespace FProg
 
 /-- The Brainfuck code of a flag program. -/
+-- ANCHOR: compile
 def compile : FProg F → Program
   | skip => []
   | set f => atFlag f [.loop [.dec], .inc]
@@ -446,6 +451,7 @@ def compile : FProg F → Program
   | shift d => mv (card F * d)
   | p ⨾ q => p.compile ++ q.compile
   | when f p => atFlag f [.loop (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f))]
+-- ANCHOR_END: compile
 
 /-- The Brainfuck loop that `when f p` compiles to, run from `f`'s cell. -/
 def loopCode (f : F) (p : FProg F) : Stmt :=
@@ -454,8 +460,10 @@ def loopCode (f : F) (p : FProg F) : Stmt :=
 theorem compile_when (f : F) (p : FProg F) : (when f p).compile = atFlag f [loopCode f p] := rfl
 
 /-- **Layer A.** Compiled code does to the tape what the program does to the flag set. -/
+-- ANCHOR: compile_spec
 theorem compile_spec : ∀ (p : FProg F) {P Q : Set (ℤ × F)} {t : Tape Cell},
     p.den P = some Q → Holds 0 P t → ∃ u, Holds 0 Q u ∧ Runs p.compile t u
+-- ANCHOR_END: compile_spec
   | skip, P, Q, t, e, h => by cases e; exact ⟨t, h, Runs.nil⟩
   | set f, P, Q, t, e, h => by
     cases e

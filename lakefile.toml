@@ -17,3 +17,9 @@ rev = "v4.36.0"
 
 [[lean_lib]]
 name = "BfTuringComplete"
+
+# Lets the Verso book in `book/` extract highlighted code from these modules.
+[[require]]
+name = "subverso"
+git = "https://github.com/leanprover/subverso"
+rev = "no-modules/f9c40d40521bc71f0c33bff422d085dd86d359bd"
