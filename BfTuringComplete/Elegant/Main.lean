@@ -10,11 +10,46 @@ tape holds exactly the TM's final tape in the block code `enc`.
 
 noncomputable section
 namespace BF.Elegant
-open Turing StateTransition Relation Classical Fintype FProg
+open Turing StateTransition Relation Fintype FProg
+attribute [local instance] Classical.propDecidable
 
-variable {Γ Λ : Type*} [Inhabited Γ] [Inhabited Λ] [Fintype Γ] [Fintype Λ] (M : TM0.Machine Γ Λ)
+variable {Γ Λ : Type*} [Inhabited Γ]
 
 local notation "Fl" => Flag Γ Λ
+
+/-! ## The block code -/
+
+theorem symFlags_default (f : Fl) : ¬symFlags (default : Γ) f := by simp [symFlags]
+
+/-- Symbol `a` as a block: its `sym` flag raised, unless it is the blank. -/
+def enc [Fintype Γ] [Fintype Λ] : Γ → List Cell := block ∘ symFlags (Λ := Λ)
+
+theorem enc_injective [Fintype Γ] [Fintype Λ] : Function.Injective (enc (Γ := Γ) (Λ := Λ)) := by
+  intro a b h
+  by_contra hab
+  wlog ha : a ≠ default generalizing a b
+  · exact this h.symm (Ne.symm hab) (by rintro rfl; exact ha (by simp_all))
+  have := congrArg (·.getI (pos (Flag.sym a : Fl))) h
+  simp [enc, block_getI, symFlags, ha, hab] at this
+
+/-- The block code of symbols. -/
+def code [Fintype Γ] [Fintype Λ] : BlockCode Γ where
+  width := card Fl
+  enc := enc (Λ := Λ)
+  length_enc _ := block_length _
+  enc_default := by
+    rw [enc, Function.comp_apply, show symFlags (Λ := Λ) (default : Γ) = fun _ ↦ False from
+      funext fun f ↦ propext ⟨symFlags_default f, False.elim⟩, block_empty]
+  injective := enc_injective
+
+theorem cfgSet_run (c : TM0.Cfg Γ Λ) :
+    (cfgSet c ∪ here [.run]) \ {(0, .run)} = (cfgSet c : Set (ℤ × Fl)) := by
+  ext ⟨j, f⟩; cases f <;> simp [cfgSet, tapeSet, symFlags, here]
+
+/-! ## The main loop -/
+
+variable [Inhabited Λ] [Fintype Γ] [Fintype Λ] (M : TM0.Machine Γ Λ)
+
 
 /-- The main loop: while `run` is raised, perform a step. -/
 def mainLoop : Stmt := loopCode (Flag.run : Fl) (stepProg M)
@@ -33,10 +68,6 @@ def Tracks (c : TM0.Cfg Γ Λ) (b : Cfg) : Prop :=
   TM0.step M c = none ∧ (∃ t, Holds 0 (tapeSet c.Tape : Set (ℤ × Fl)) t ∧ b = ⟨[], t⟩) ∨
   (TM0.step M c).isSome ∧ ∃ t, Running c t ∧ b = ⟨mainLoop M :: mv (-pos (Flag.run : Fl)), t⟩
 
-theorem cfgSet_run (c : TM0.Cfg Γ Λ) :
-    (cfgSet c ∪ here [.run]) \ {(0, .run)} = (cfgSet c : Set (ℤ × Fl)) := by
-  ext ⟨j, f⟩; cases f <;> simp [cfgSet, tapeSet, symFlags, here]
-
 /-- From a running configuration, the BF program reaches a configuration tracking it. -/
 theorem settle (c : TM0.Cfg Γ Λ) (t : Tape Cell) (h : Running c t) :
     ∃ b, Tracks M c b ∧ Reaches step ⟨mainLoop M :: mv (-pos (Flag.run : Fl)), t⟩ b := by
@@ -45,7 +76,8 @@ theorem settle (c : TM0.Cfg Γ Λ) (t : Tape Cell) (h : Running c t) :
       rw [cfgSet_run, step_den, e]) h (mv (-pos (Flag.run : Fl)))
     obtain ⟨v, hv, r'⟩ := hu.mv (-pos (Flag.run : Fl))
     refine ⟨⟨[], v⟩, .inl ⟨e, v, by simpa using hv, rfl⟩, r.to_reflTransGen.trans
-      ((loop_exit _ (by simp [tapeSet, symFlags]) hu _).trans (by have := r' []; rwa [List.append_nil] at this))⟩
+      ((loop_exit _ (by simp [tapeSet, symFlags]) hu _).trans
+        (by have := r' []; rwa [List.append_nil] at this))⟩
   · exact ⟨_, .inr ⟨by simp [e], t, h, rfl⟩, .refl⟩
 
 theorem respects : Respects (TM0.step M) step (Tracks M) := by
@@ -62,35 +94,11 @@ theorem respects : Respects (TM0.step M) step (Tracks M) := by
       unfold Running; convert hu using 2; ext ⟨j, f⟩; cases f <;> simp [cfgSet, here])
     exact ⟨b', h', r.trans_left r'⟩
 
-/-! ## The block code -/
-
-theorem symFlags_default (f : Fl) : ¬symFlags (default : Γ) f := by simp [symFlags]
-
-/-- Symbol `a` as a block: its `sym` flag raised, unless it is the blank. -/
-def enc : Γ → List Cell := block ∘ symFlags (Λ := Λ)
-
-theorem enc_injective : Function.Injective (enc (Γ := Γ) (Λ := Λ)) := by
-  intro a b h
-  by_contra hab
-  wlog ha : a ≠ default generalizing a b
-  · exact this h.symm (Ne.symm hab) (by rintro rfl; exact ha (by simp_all))
-  have := congrArg (·.getI (pos (Flag.sym a : Fl))) h
-  simp [enc, block_getI, symFlags, ha, hab] at this
-
-/-- The block code of symbols. -/
-def code : BlockCode Γ where
-  width := card Fl
-  enc := enc (Λ := Λ)
-  length_enc _ := block_length _
-  enc_default := by
-    rw [enc, Function.comp_apply, show symFlags (Λ := Λ) (default : Γ) = fun _ ↦ False from
-      funext fun f ↦ propext ⟨symFlags_default f, False.elim⟩, block_empty]
-  injective := enc_injective
-
 /-! ## The claim -/
 
 theorem eval_eq (l : List Γ) :
-    eval (program M) (l.flatMap (code (Λ := Λ)).enc) = (TM0.eval M l).map (code (Λ := Λ)).encTape := by
+    eval (program M) (l.flatMap (code (Λ := Λ)).enc) =
+      (TM0.eval M l).map (code (Λ := Λ)).encTape := by
   obtain ⟨t₁, h₁, r₁⟩ := compile_spec (FProg.set (Flag.state default : Fl) ⨾ .set .run)
     (P := tapeSet (Tape.mk₁ l)) rfl (holds_mk₁ _ symFlags_default l)
   obtain ⟨t₂, h₂, r₂⟩ := h₁.mv (pos (Flag.run : Fl))

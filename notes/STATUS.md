@@ -16,7 +16,7 @@ Score = Lean tokens (identifiers, numbers, keywords, operators each count 1; com
 2. `Exposition/`: most readable for humans, length irrelevant.
 3. `Elegant/`: as short as possible while staying elegant and readable.
 
-Current (chars / tokens): Reference = 38076 / 15793. Golf = 17572 / 9629 (v1 was 10472). Elegant = 24475 / 10044 (with docs).
+Current (chars / tokens): Reference = 38076 / 15793. Golf = 17572 / 9629 (v1 was 10472). Elegant = 25392 / 10204 (with docs).
 
 ## Reference proof architecture
 Compiler (`Compile.lean`): one-hot blocks of width 2n+2m+6 per TM cell (sym, xsym, st, pend, T, ML, MR, R).
@@ -65,19 +65,18 @@ Build note: Golf/G.lean takes ~35 s and sets maxHeartbeats 1000000.
 - Build takes ~65 s since auto-params (was 31 s). Run builds in the background with a time cap.
 
 ## Elegant (done, 2026-11-24): two layers, no offset arithmetic in the TM part
-`BF.Elegant.claim : Claim` is proven (axioms: propext, Classical.choice, Quot.sound). Builds in ~15 s total.
-- `Elegant/Flags.lean` (Layer A, 3685 tokens): flag programs `FProg F` (`skip | set | clr | shift |
-  seq (⨾) | when`), their meaning `den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))`, the compiler
-  (`set = [-]+`, `clr = [-]`, `when f p = [ [-] p ]` at `f`'s cell), and `compile_spec`: compiled
-  code does to the tape what `den` does to the flag set. `loop_pass`/`loop_exit` view `when` as a while
-  loop. The only layout arithmetic is `cell_eq`.
-- `Elegant/Machine.lean` (Layer B, 3718 tokens): `Flag Γ Λ` (`sym | state | blank | write | next |
-  left | right | run`), the step program (`dispatch ⨾ flush ⨾ move ⨾ commit`), one `den` lemma per
-  phase, and `step_den`: one run of `stepProg` performs one TM step. Phase states are written as
-  `tapeSet T ∪ here [flags]`; set equalities close by `flags` (ext, cases on the flag, simp, aesop).
-- `Elegant/Main.lean` (2641 tokens): main loop on `run`, `Tracks` relation + `Respects`, the block code
-  `enc` (width `card Flag`), and `eval_eq`/`claim`.
-Possible polish: shorter encoding lemmas in Main (ported from Golf); `den_all` noop side goals.
+`BF.Elegant.claim : Claim` is proven (axioms: propext, Classical.choice, Quot.sound). No warnings of its own.
+- `Elegant/Flags.lean` (Layer A): running BF code; flag programs `FProg F` (`skip | set | clr | shift |
+  ⨾ | when`) with meaning `den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))` and derived forms
+  (`all`, `hop`, with `den_all`/`den_when_on`/`den_when_off`/`den_hop`); flag sets on the tape (`Holds`,
+  the only layout arithmetic is `cell_eq`); tapes of blocks (`block`, `holds_mk₁`, `right₀_eq`);
+  the compiler and `compile_spec`, plus `loop_pass`/`loop_exit` (the compiled `when` as a while loop).
+- `Elegant/Machine.lean` (Layer B): `Flag Γ Λ`, `pend` (flags a transition raises), `tapeSet`/`cfgSet`,
+  then one section per phase (program followed by its `den` lemma), and `step_den`.
+  Set equalities close by `flags` (ext, cases on the flag, simp, aesop).
+- `Elegant/Main.lean`: the block code `enc = block ∘ symFlags`, main loop on `run`, `Tracks` +
+  `Respects`, `eval_eq`, `claim`.
+Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 tokens).
 
 Then Exposition = Elegant plus prose, worked example, and a discussion of the statement's scope
 (TM0 vs partrec, two-sided tape, per-machine block code, right₀-only output, noncomputable compiler).

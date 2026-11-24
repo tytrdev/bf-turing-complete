@@ -19,7 +19,8 @@ code does to the tape what the flag program does to the flag set.
 
 noncomputable section
 namespace BF.Elegant
-open Turing StateTransition Relation Classical Fintype
+open Turing StateTransition Relation Fintype
+attribute [local instance] Classical.propDecidable
 
 /-! ## Running code -/
 
@@ -42,7 +43,8 @@ theorem Runs.loopSkip (h : t.head = 0) : Runs [.loop B] t t :=
 
 /-- A loop whose body runs once and leaves the head cell zero. -/
 theorem Runs.loopOnce (h : t.head ≠ 0) (g : Runs B t u) (h' : u.head = 0) : Runs [.loop B] t u :=
-  fun k ↦ .head (b := ⟨B ++ .loop B :: k, t⟩) (by simp [step, h]) ((g _).trans ((Runs.loopSkip h') k))
+  fun k ↦ .head (b := ⟨B ++ .loop B :: k, t⟩) (by simp [step, h])
+    ((g _).trans ((Runs.loopSkip h') k))
 
 /-- `[-]` clears the head cell, whatever it holds. -/
 theorem Runs.clear (t : Tape Cell) : Runs [.loop [.dec]] t (t.write 0) := by
@@ -57,7 +59,7 @@ theorem Runs.clear (t : Tape Cell) : Runs [.loop [.dec]] t (t.write 0) := by
     intro t h
     have hne : t.head ≠ 0 := fun h0 ↦ by simp [h0] at h
     have := ih (t.write (t.head - 1)) (by
-      show (t.head - 1).val = n; rw [Fin.coe_sub]; have := t.head.isLt; simp; omega)
+      change (t.head - 1).val = n; rw [Fin.val_sub]; have := t.head.isLt; simp; omega)
     exact fun k ↦ .head (b := ⟨.dec :: .loop [.dec] :: k, t⟩) (by simp [step, hne])
       (.head rfl (this k))
 
@@ -80,6 +82,110 @@ theorem Runs.mv (x : ℤ) (t : Tape Cell) : ∃ u, Runs (mv x) t u ∧ ∀ i, u.
   · obtain ⟨u, r, e⟩ := Runs.replicate .left (·.move .left) (-1) (fun _ _ ↦ rfl)
       (by simp [sub_eq_add_neg]) (-x).toNat t
     exact ⟨u, r, fun i ↦ by rw [e]; congr 1; omega⟩
+
+/-! ## Flag programs -/
+
+section Programs
+variable {F : Type*}
+
+
+/-- Flag programs over the flag type `F`. -/
+inductive FProg (F : Type*)
+  | skip
+  | set (f : F)
+  | clr (f : F)
+  | shift (d : ℤ)
+  | seq (p q : FProg F)
+  | when (f : F) (p : FProg F)
+
+/-- `p ⨾ q`: run `p`, then `q`. -/
+infixr:60 " ⨾ " => FProg.seq
+
+namespace FProg
+
+/-- What a flag program does to the flag set. `when f p` clears `f` and runs `p` if `f` is set;
+it fails (`none`) if `p` sets `f` again, since the Brainfuck loop would then repeat. -/
+def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
+  | skip, P => some P
+  | set f, P => some (insert (0, f) P)
+  | clr f, P => some (P \ {(0, f)})
+  | shift d, P => some ((fun x ↦ (x.1 + d, x.2)) ⁻¹' P)
+  | p ⨾ q, P => (p.den P).bind q.den
+  | when f p, P =>
+    if (0, f) ∈ P then (p.den (P \ {(0, f)})).bind fun Q ↦ if (0, f) ∈ Q then none else some Q
+    else some P
+
+@[simp] theorem den_skip (P : Set (ℤ × F)) : (skip : FProg F).den P = some P := rfl
+@[simp] theorem den_set (f : F) (P : Set (ℤ × F)) : (set f).den P = some (insert (0, f) P) := rfl
+@[simp] theorem den_clr (f : F) (P : Set (ℤ × F)) : (clr f).den P = some (P \ {(0, f)}) := rfl
+@[simp] theorem den_shift (d : ℤ) (P : Set (ℤ × F)) :
+    (shift d).den P = some ((fun x ↦ (x.1 + d, x.2)) ⁻¹' P) := rfl
+@[simp] theorem den_seq (p q : FProg F) (P : Set (ℤ × F)) : (p ⨾ q).den P = (p.den P).bind q.den :=
+  rfl
+
+/-! ### Derived forms -/
+
+/-- Run `g x` for every `x`, in some fixed order. -/
+def all {α : Type*} [Fintype α] (g : α → FProg F) : FProg F :=
+  (Finset.univ : Finset α).toList.foldr (fun x p ↦ g x ⨾ p) .skip
+
+theorem den_foldr_skip {α : Type*} (L : List α) (g : α → FProg F) {P : Set (ℤ × F)}
+    (h : ∀ x ∈ L, (g x).den P = some P) : (L.foldr (fun x p ↦ g x ⨾ p) .skip).den P = some P := by
+  induction L with
+  | nil => rfl
+  | cons x L ih => simp [h x (by simp), ih fun y hy ↦ h y (by simp [hy])]
+
+theorem den_foldr_one {α : Type*} (L : List α) (hL : L.Nodup) (g : α → FProg F) (a : α)
+    (ha : a ∈ L) {P Q : Set (ℤ × F)} (hA : (g a).den P = some Q)
+    (h : ∀ x, x ≠ a → (g x).den P = some P ∧ (g x).den Q = some Q) :
+    (L.foldr (fun x p ↦ g x ⨾ p) .skip).den P = some Q := by
+  induction L with
+  | nil => simp at ha
+  | cons x L ih =>
+    obtain ⟨hx, hL⟩ := List.nodup_cons.1 hL
+    by_cases e : x = a
+    · subst e
+      simp [hA, den_foldr_skip L g fun y hy ↦ (h y fun e ↦ hx (e ▸ hy)).2]
+    · simp [(h x e).1, ih hL (by simpa [Ne.symm e] using ha)]
+
+/-- If `g x` changes nothing for every `x`, neither does `all g`. -/
+theorem den_all_skip {α : Type*} [Fintype α] (g : α → FProg F) {P : Set (ℤ × F)}
+    (h : ∀ x, (g x).den P = some P) : (all g).den P = some P :=
+  den_foldr_skip _ g fun x _ ↦ h x
+
+/-- If only `g a` does anything, `all g` does what `g a` does. -/
+theorem den_all {α : Type*} [Fintype α] (g : α → FProg F) (a : α) {P Q : Set (ℤ × F)}
+    (hA : (g a).den P = some Q) (h : ∀ x, x ≠ a → (g x).den P = some P ∧ (g x).den Q = some Q) :
+    (all g).den P = some Q :=
+  den_foldr_one _ (Finset.nodup_toList _) g a (by simp) hA h
+
+theorem den_when_off {f : F} {p : FProg F} {P : Set (ℤ × F)} (h : (0, f) ∉ P) :
+    (when f p).den P = some P := by simp [den, h]
+
+theorem den_when_on {f : F} {p : FProg F} {P Q : Set (ℤ × F)} (h : (0, f) ∈ P)
+    (hp : p.den (P \ {(0, f)}) = some Q) (hQ : (0, f) ∉ Q) : (when f p).den P = some Q := by
+  simp [den, h, hp, hQ]
+
+/-- If `f` is raised here, move it to the block `d` away. -/
+def hop (f : F) (d : ℤ) : FProg F := .when f (.shift d ⨾ .set f ⨾ .shift (-d))
+
+theorem den_hop {f : F} {d : ℤ} (hd : d ≠ 0) {P : Set (ℤ × F)} (h : (0, f) ∈ P) :
+    (hop f d).den P = some (insert (d, f) (P \ {(0, f)})) := by
+  refine den_when_on h ?_ (by simp [Ne.symm hd])
+  simp only [den_seq, den_shift, den_set, Option.bind_some, Option.some.injEq]
+  ext ⟨j, g⟩
+  simp only [Set.mem_preimage, Set.mem_insert_iff, Set.mem_sdiff, Set.mem_singleton_iff,
+    Prod.mk.injEq, neg_add_cancel_right]
+  constructor
+  · rintro (⟨h1, rfl⟩ | h1)
+    · left; exact ⟨by omega, rfl⟩
+    · right; exact h1
+  · rintro (⟨rfl, rfl⟩ | h1)
+    · left; simp
+    · right; exact h1
+
+end FProg
+end Programs
 
 /-! ## Flag sets on the tape -/
 
@@ -125,7 +231,7 @@ theorem Holds.write {f : F} (h : Holds (pos f) P t) (hQ : ∀ x, x ≠ (0, f) �
   rw [Tape.write_nth]
   by_cases hc : (card F : ℤ) * j + pos g - pos f = 0
   · obtain ⟨rfl, rfl⟩ := cell_eq.1 hc; simp
-  · rw [if_neg hc, h j g, hQ (j, g) fun e ↦ hc (cell_eq.2 (by simpa using e))]
+  · rw [ite_eq_right hc, h j g, hQ (j, g) fun e ↦ hc (cell_eq.2 (by simpa using e))]
 
 /-- Code run on `f`'s cell: move there, run `c`, move back. -/
 def atFlag (f : F) (c : Program) : Program := mv (pos f) ++ c ++ mv (-pos f)
@@ -164,7 +270,8 @@ theorem cell_split [Nonempty F] (i : ℕ) : ∃ (j : ℕ) (f : F), i = card F * 
 variable {α : Type*} [Inhabited α] (cells : α → F → Prop)
 
 theorem flatMap_block_getI (hd : ∀ f, ¬cells default f) (l : List α) (j : ℕ) (f : F) :
-    (l.flatMap (block ∘ cells)).getI (card F * j + pos f) = if cells (l.getI j) f then 1 else 0 := by
+    (l.flatMap (block ∘ cells)).getI (card F * j + pos f) =
+      if cells (l.getI j) f then 1 else 0 := by
   induction l generalizing j with
   | nil =>
     rw [List.flatMap_nil, List.getI_nil, List.getI_nil]
@@ -219,40 +326,9 @@ theorem right₀_eq [Nonempty F] (hd : ∀ f, ¬cells default f) (T : Tape α) (
     at this
   rw [Tape.right₀_nth, this, key, Tape.right₀_nth, Set.mem_ofPred_eq]
 
-/-! ## Flag programs -/
-
-/-- Flag programs over the flag type `F`. -/
-inductive FProg (F : Type*)
-  | skip
-  | set (f : F)
-  | clr (f : F)
-  | shift (d : ℤ)
-  | seq (p q : FProg F)
-  | when (f : F) (p : FProg F)
-
-@[inherit_doc] infixr:60 " ⨾ " => FProg.seq
+/-! ## Compiling flag programs -/
 
 namespace FProg
-
-/-- What a flag program does to the flag set. `when f p` clears `f` and runs `p` if `f` is set;
-it fails (`none`) if `p` sets `f` again, since the Brainfuck loop would then repeat. -/
-def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
-  | skip, P => some P
-  | set f, P => some (insert (0, f) P)
-  | clr f, P => some (P \ {(0, f)})
-  | shift d, P => some ((fun x ↦ (x.1 + d, x.2)) ⁻¹' P)
-  | p ⨾ q, P => (p.den P).bind q.den
-  | when f p, P =>
-    if (0, f) ∈ P then (p.den (P \ {(0, f)})).bind fun Q ↦ if (0, f) ∈ Q then none else some Q
-    else some P
-
-@[simp] theorem den_skip (P : Set (ℤ × F)) : (skip : FProg F).den P = some P := rfl
-@[simp] theorem den_set (f : F) (P : Set (ℤ × F)) : (set f).den P = some (insert (0, f) P) := rfl
-@[simp] theorem den_clr (f : F) (P : Set (ℤ × F)) : (clr f).den P = some (P \ {(0, f)}) := rfl
-@[simp] theorem den_shift (d : ℤ) (P : Set (ℤ × F)) :
-    (shift d).den P = some ((fun x ↦ (x.1 + d, x.2)) ⁻¹' P) := rfl
-@[simp] theorem den_seq (p q : FProg F) (P : Set (ℤ × F)) : (p ⨾ q).den P = (p.den P).bind q.den :=
-  rfl
 
 /-- The Brainfuck code of a flag program. -/
 def compile : FProg F → Program
@@ -276,12 +352,12 @@ theorem compile_spec : ∀ (p : FProg F) {P Q : Set (ℤ × F)} {t : Tape Cell},
   | set f, P, Q, t, e, h => by
     cases e
     refine h.atFlag fun t ht ↦ ⟨_, ht.write (Q := insert (0, f) P) fun x hx ↦ by simp [hx], ?_⟩
-    rw [if_pos (by simp)]
+    rw [ite_eq_left (by simp)]
     exact (Runs.clear t).seq (Runs.cons (fun _ ↦ rfl) Runs.nil)
   | clr f, P, Q, t, e, h => by
     cases e
     refine h.atFlag fun t ht ↦ ⟨_, ht.write (Q := P \ {(0, f)}) fun x hx ↦ by simp [hx], ?_⟩
-    rw [if_neg (by simp)]
+    rw [ite_eq_right (by simp)]
     exact Runs.clear t
   | shift d, P, Q, t, e, h => by
     cases e
@@ -306,9 +382,10 @@ where
   /-- One pass of the loop body: clear `f`, run `p` from the block start, return to `f`. -/
   pass (p : FProg F) {f : F} {P R : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∈ P)
       (e : p.den (P \ {(0, f)}) = some R) (ht : Holds (pos f) P t) :
-      ∃ u, Holds (pos f) R u ∧ Runs (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f)) t u := by
+      ∃ u, Holds (pos f) R u ∧
+        Runs (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f)) t u := by
     have hc := ht.write (Q := P \ {(0, f)}) fun x hx ↦ by simp [hx]
-    rw [if_neg (by simp)] at hc
+    rw [ite_eq_right (by simp)] at hc
     obtain ⟨t₁, h₁, r₁⟩ := hc.mv (-pos f)
     obtain ⟨t₂, h₂, r₂⟩ := compile_spec p e (by simpa using h₁)
     obtain ⟨t₃, h₃, r₃⟩ := h₂.mv (pos f)
@@ -317,7 +394,8 @@ where
 /-- The loop of `when f p` as a `while` loop: if `f` is set, one pass of the body. -/
 theorem loop_pass (p : FProg F) {f : F} {P R : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∈ P)
     (e : p.den (P \ {(0, f)}) = some R) (ht : Holds (pos f) P t) (k : Program) :
-    ∃ u, Holds (pos f) R u ∧ TransGen (fun a b ↦ b ∈ step a) ⟨loopCode f p :: k, t⟩ ⟨loopCode f p :: k, u⟩ := by
+    ∃ u, Holds (pos f) R u ∧
+      TransGen (fun a b ↦ b ∈ step a) ⟨loopCode f p :: k, t⟩ ⟨loopCode f p :: k, u⟩ := by
   obtain ⟨u, hu, r⟩ := compile_spec.pass p hf e ht
   exact ⟨u, hu, .head' (by simp [step, loopCode, ht.head, hf]) (r _)⟩
 
