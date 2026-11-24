@@ -105,6 +105,16 @@ theorem S.l1 (hb : b = w * d + o) (ho : o < w) (h1 : P d o) (hB : S w B b P b Q)
   obtain ⟨v, hv, r'⟩ := hl u hu
   exact ⟨v, hv, fun k ↦ .head (by simp [step, hd ht hb ho, h1]) ((r _).trans (r' k))⟩
 
+set_option hygiene false in
+macro "om" : tactic => `(tactic|
+  (simp (config := { failIfUnchanged := false }) only [sy, S0, NX, AP, RP, W, Rf, ne_eq,
+    false_and, and_false, false_or, or_false, iff_def, false_implies, imp_false, true_and,
+    and_true, not_true_eq_false, not_false_eq_true, true_or, or_true, true_implies,
+    implies_true, and_self, or_self, eq_self_iff_true, Fin.val_mk, iff_self] at * <;> omega))
+
+set_option hygiene false in
+macro "oi" : tactic => `(tactic| (intro j r hr; by_cases hj : j = 0 <;> (try subst hj) <;> om))
+
 def IF (o : ℕ) (B : Program) : Program :=
   mv o ++ [.loop (.dec :: mv (-o) ++ B ++ mv o)] ++ mv (-o)
 def ia (x : ℤ) : Program := mv x ++ .inc :: mv (-x)
@@ -118,11 +128,11 @@ theorem S.sd (ho : o < w) (h1 : P 0 o) :
     S w (da o) 0 P 0 fun j r ↦ ¬(j = 0 ∧ r = o) ∧ P j r :=
   (S.mo (c := o) (by simp)).ap ((S.dec (d := 0) (by simp) ho h1).ap (S.mo (by simp)))
 
-theorem S.i0 (ho : o < w) (h0 : ¬P 0 o) : S w (IF o B) 0 P 0 P :=
+theorem S.i0 (ho : o < w := by om) (h0 : ¬P 0 o := by om) : S w (IF o B) 0 P 0 P :=
   ((S.mo (c := o) (by simp)).ap (S.l0 (d := 0) (by simp) ho h0)).ap (S.mo (by simp))
 
-theorem S.i1 (ho : o < w) (h1 : P 0 o)
-    (hB : S w B 0 (fun j r ↦ ¬(j = 0 ∧ r = o) ∧ P j r) 0 Q) (hQ : ¬Q 0 o) :
+theorem S.i1 (hB : S w B 0 (fun j r ↦ ¬(j = 0 ∧ r = o) ∧ P j r) 0 Q)
+    (ho : o < w := by om) (h1 : P 0 o := by om) (hQ : ¬Q 0 o := by om) :
     S w (IF o B) 0 P 0 Q :=
   ((S.mo (c := o) (by simp)).ap (S.l1 (d := 0) (by simp) ho h1
     ((((S.dec (d := 0) (by simp) ho h1).ap (S.mo (c := 0) (by simp))).ap hB).ap
@@ -232,13 +242,6 @@ def NX (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
   (D M q (T.nth 0)).2.2.2.2 = 1 ∧ S0 M q T (j + 1) r ∨
   (D M q (T.nth 0)).2.2.2.1 = 0 ∧ (D M q (T.nth 0)).2.2.2.2 = 0 ∧ S0 M q T j r
 
-macro "om" : tactic => `(tactic|
-  (simp (config := { failIfUnchanged := false }) only [sy, S0, NX, AP, RP, W, Rf, ne_eq,
-    false_and, and_false, false_or, or_false, iff_def, false_implies, imp_false, true_and,
-    and_true, not_true_eq_false, not_false_eq_true, true_or, or_true, true_implies,
-    implies_true, and_self, or_self, eq_self_iff_true, Fin.val_mk, iff_self] at * <;> omega))
-
-macro "oi" : tactic => `(tactic| (intro j r hr; by_cases hj : j = 0 <;> (try subst hj) <;> om))
 
 /-! ## Phases -/
 
@@ -260,21 +263,21 @@ theorem dsS (T : Tape Γ) (q : Λ) :
   unfold ds
   by_cases ha : (E Γ (T.nth 0) : ℕ) = 0
   · have e : T.nth 0 = default := (E Γ).injective (Fin.ext (by rw [ha, E0]; rfl))
-    refine (I.ap (S.fN _ _ fun i _ ↦ S.i0 (by om) (by om))).ap ?_
+    refine (I.ap (S.fN _ _ fun i _ ↦ S.i0)).ap ?_
     rw [e] at this ⊢
-    exact S.i1 (by om) (by om) ((sAct M T q default).cq (by oi) fun _ _ _ ↦ .rfl) (by om)
+    exact S.i1 ((sAct M T q default).cq (by oi) fun _ _ _ ↦ .rfl)
   · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = E Γ (T.nth 0) :=
       ⟨⟨(E Γ (T.nth 0) : ℕ) - 1, by have := (E Γ (T.nth 0)).isLt; omega⟩,
         by simp only; omega⟩
     have hs : (E Γ).symm i₀.succ = T.nth 0 :=
       (E Γ).symm_apply_eq.2 (Fin.ext (by simp only [Fin.val_succ]; omega))
     refine (I.ap (S.f1 _ (List.nodup_finRange _) _ i₀ (List.mem_finRange _) ?_ ?_ ?_)).ap
-      (S.i0 (by om) (by om))
+      (S.i0)
     · simp only [hs]
-      exact S.i1 (by om) (by om) (((S.sd (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)).ap
-        (sAct M T q _)) (by om)
-    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
-    · intro i _ _; exact S.i0 (by om) (by om)
+      exact S.i1 (((S.sd (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)).ap
+        (sAct M T q _))
+    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
+    · intro i _ _; exact S.i0
 
 theorem dpS (T : Tape Γ) (q : Λ) :
     S (W M) (dp M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = 2 * (card Γ - 1) + E Λ q) 0
@@ -282,9 +285,9 @@ theorem dpS (T : Tape Γ) (q : Λ) :
   have := DB M q (T.nth 0)
   refine S.f1 _ (List.nodup_finRange _) _ (E Λ q) (List.mem_finRange _) ?_ ?_ ?_
   · simp only [Equiv.symm_apply_apply]
-    exact S.i1 (by om) (by om) ((dsS M T q).cq (by oi) fun _ _ _ ↦ .rfl) (by om)
-  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
-  · intro i _ _; exact S.i0 (by om) (by om)
+    exact S.i1 ((dsS M T q).cq (by oi) fun _ _ _ ↦ .rfl)
+  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
+  · intro i _ _; exact S.i0
 
 theorem flS (T : Tape Γ) (q : Λ) :
     S (W M) (fl M) 0 (fun j r ↦ j ≠ 0 ∧ sy T j r ∨ j = 0 ∧ AP M q (T.nth 0) r) 0
@@ -292,14 +295,14 @@ theorem flS (T : Tape Γ) (q : Λ) :
   have := DB M q (T.nth 0)
   unfold fl
   by_cases h0 : (D M q (T.nth 0)).1 = 0
-  · exact (S.fN _ _ fun i _ ↦ S.i0 (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)
+  · exact (S.fN _ _ fun i _ ↦ S.i0).cq (fun _ _ _ ↦ .rfl) (by oi)
   · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = (D M q (T.nth 0)).1 :=
       ⟨⟨(D M q (T.nth 0)).1 - 1, by omega⟩, by simp only; omega⟩
     refine S.f1 _ (List.nodup_finRange _) _ i₀ (List.mem_finRange _) ?_ ?_ ?_
-    · exact S.i1 (by om) (by om) ((S.si (d := 0) (o := i₀) (by simp) (by om) (by om)).cq
-        (fun _ _ _ ↦ .rfl) (by oi)) (by om)
-    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
-    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
+    · exact S.i1 ((S.si (d := 0) (o := i₀) (by simp) (by om) (by om)).cq
+        (fun _ _ _ ↦ .rfl) (by oi))
+    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
+    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
 
 theorem caS (T : Tape Γ) (q : Λ) (d : ℤ) (hd : d = 1 ∨ d = -1) (k : ℕ) (hk : k < (card Λ - 1) + 1) :
     S (W M) (cb M d) 0 (fun j r ↦ S0 M q T j r ∨ j = 0 ∧
@@ -309,13 +312,13 @@ theorem caS (T : Tape Γ) (q : Λ) (d : ℤ) (hd : d = 1 ∨ d = -1) (k : ℕ) (
   have := DB M q (T.nth 0)
   refine (((S.f1 (Q := fun j r ↦ j = d ∧ r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + k ∨ S0 M q T j r ∨
       j = 0 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) _ (List.nodup_finRange _) _ ⟨k, hk⟩
-      (List.mem_finRange _) ?_ ?_ ?_).ap (S.i1 (by om) (by om)
-        (S.si (d := d) (o := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (by ring) (by om) (by om)) (by om))).ap
+      (List.mem_finRange _) ?_ ?_ ?_).ap (S.i1
+        (S.si (d := d) (o := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (by ring) (by om) (by om)))).ap
       (S.bm d)).cq (fun _ _ _ ↦ .rfl) (by oi)
-  · exact S.i1 (by om) (by om) ((S.si (d := d) (o := 2 * (card Γ - 1) + (card Λ - 1) + 1 + k) (by simp; ring)
-      (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)) (by om)
-  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
-  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
+  · exact S.i1 ((S.si (d := d) (o := 2 * (card Γ - 1) + (card Λ - 1) + 1 + k) (by simp; ring)
+      (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi))
+  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
+  · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
 
 theorem mvS (T : Tape Γ) (q : Λ) :
     S (W M) (IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 3) (cb M (-1)) ++ IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 4) (cb M 1)) 0
@@ -324,12 +327,12 @@ theorem mvS (T : Tape Γ) (q : Λ) :
         (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
   have := DB M q (T.nth 0)
   by_cases hL : (D M q (T.nth 0)).2.2.2.1 = 1
-  · exact ((S.i1 (by om) (by om) ((caS M T q (-1) (by simp) _ this.2.1).cq (by oi)
-      fun _ _ _ ↦ .rfl) (by om)).ap (S.i0 (by om) (by om))).cq (fun _ _ _ ↦ .rfl) (by oi)
+  · exact ((S.i1 ((caS M T q (-1) (by simp) _ this.2.1).cq (by oi)
+      fun _ _ _ ↦ .rfl)).ap (S.i0)).cq (fun _ _ _ ↦ .rfl) (by oi)
   · by_cases hR : (D M q (T.nth 0)).2.2.2.2 = 1
-    · exact ((S.i0 (by om) (by om)).ap (S.i1 (by om) (by om) ((caS M T q 1 (by simp) _
-        this.2.1).cq (by oi) fun _ _ _ ↦ .rfl) (by om))).cq (fun _ _ _ ↦ .rfl) (by oi)
-    · exact ((S.i0 (by om) (by om)).ap (S.i0 (by om) (by om))).cq (fun _ _ _ ↦ .rfl) (by oi)
+    · exact ((S.i0).ap (S.i1 ((caS M T q 1 (by simp) _
+        this.2.1).cq (by oi) fun _ _ _ ↦ .rfl))).cq (fun _ _ _ ↦ .rfl) (by oi)
+    · exact ((S.i0).ap (S.i0)).cq (fun _ _ _ ↦ .rfl) (by oi)
 
 theorem cmS (T : Tape Γ) (q : Λ) :
     S (W M) (cm M) 0 (fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
@@ -340,11 +343,11 @@ theorem cmS (T : Tape Γ) (q : Λ) :
   unfold cm
   by_cases hc : (D M q (T.nth 0)).2.2.1 = 1
   · refine S.f1 _ (List.nodup_finRange _) _ ⟨_, this.2.1⟩ (List.mem_finRange _) ?_ ?_ ?_
-    · exact S.i1 (by om) (by om) ((S.si (d := 0) (o := 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1)
-        (by simp) (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)) (by om)
-    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 (by om) (by om)
-    · intro i _ _; exact S.i0 (by om) (by om)
-  · exact (S.fN _ _ fun i _ ↦ S.i0 (by om) (by om)).cq (fun _ _ _ ↦ .rfl) fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
+    · exact S.i1 ((S.si (d := 0) (o := 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1)
+        (by simp) (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi))
+    · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
+    · intro i _ _; exact S.i0
+  · exact (S.fN _ _ fun i _ ↦ S.i0).cq (fun _ _ _ ↦ .rfl) fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
 
 theorem bdS (T : Tape Γ) (q : Λ) :
     S (W M) (bd M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = 2 * (card Γ - 1) + E Λ q) 0
