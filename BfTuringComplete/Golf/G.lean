@@ -53,6 +53,12 @@ theorem S.cq {P' Q' : ℤ → ℕ → Prop} (h : S w p b P c Q) (e₁ : ∀ j r,
   obtain ⟨u, hu, r⟩ := h t fun j r hr ↦ by rw [ht j r hr]; simp [e₁ j r hr]
   exact ⟨u, fun j r hr ↦ by rw [hu j r hr]; simp [e₂ j r hr], r⟩
 
+theorem S.cr {Q' : ℤ → ℕ → Prop} (h : S w p b P c Q) (e : ∀ j r, r < w → (Q j r ↔ Q' j r)) :
+    S w p b P c Q' := h.cq (fun _ _ _ ↦ .rfl) e
+
+theorem S.cl {P' : ℤ → ℕ → Prop} (h : S w p b P c Q) (e : ∀ j r, r < w → (P' j r ↔ P j r)) :
+    S w p b P' c Q := h.cq e fun _ _ _ ↦ .rfl
+
 theorem H.cq {t : Tape Cell} (h : H w b P t) (e : ∀ j r, r < w → (P j r ↔ Q j r)) : H w b Q t :=
   fun j r hr ↦ by rw [h j r hr]; simp [e j r hr]
 
@@ -167,8 +173,8 @@ theorem S.f1 {α} [DecidableEq α] (L : List α) (hL : L.Nodup) (g : α → Prog
 theorem S.oi {C : Prop} [Decidable C] {x : ℕ} (hx : x < w) (h0 : C → ¬P 0 x) :
     S w (if C then ia x else []) 0 P 0 fun j r ↦ j = 0 ∧ r = x ∧ C ∨ P j r := by
   split_ifs with h
-  · exact (S.si (d := 0) (by simp) hx (h0 h)).cq (fun _ _ _ ↦ .rfl) fun j r _ ↦ by simp [h]
-  · exact S.nil.cq (fun _ _ _ ↦ .rfl) fun j r _ ↦ by simp [h]
+  · exact (S.si (d := 0) (by simp) hx (h0 h)).cr fun j r _ ↦ by simp [h]
+  · exact S.nil.cr fun j r _ ↦ by simp [h]
 
 /-! ## The machine -/
 
@@ -251,7 +257,7 @@ theorem sAct (T : Tape Γ) (q : Λ) (a : Γ) :
   have := DB M q a
   unfold act
   refine (((((S.oi ?_ ?_).ap (S.oi ?_ ?_)).ap (S.oi ?_ ?_)).ap (S.oi ?_ ?_)).ap
-    (S.oi ?_ ?_)).cq (fun _ _ _ ↦ .rfl) ?_
+    (S.oi ?_ ?_)).cr ?_
   all_goals first | om | oi
 
 theorem dsS (T : Tape Γ) (q : Λ) :
@@ -265,7 +271,7 @@ theorem dsS (T : Tape Γ) (q : Λ) :
   · have e : T.nth 0 = default := (E Γ).injective (Fin.ext (by rw [ha, E0]; rfl))
     refine (I.ap (S.fN _ _ fun i _ ↦ S.i0)).ap ?_
     rw [e] at this ⊢
-    exact S.i1 ((sAct M T q default).cq (by oi) fun _ _ _ ↦ .rfl)
+    exact S.i1 ((sAct M T q default).cl (by oi))
   · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = E Γ (T.nth 0) :=
       ⟨⟨(E Γ (T.nth 0) : ℕ) - 1, by have := (E Γ (T.nth 0)).isLt; omega⟩,
         by simp only; omega⟩
@@ -274,7 +280,7 @@ theorem dsS (T : Tape Γ) (q : Λ) :
     refine (I.ap (S.f1 _ (List.nodup_finRange _) _ i₀ (List.mem_finRange _) ?_ ?_ ?_)).ap
       (S.i0)
     · simp only [hs]
-      exact S.i1 (((S.sd (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi)).ap
+      exact S.i1 (((S.sd (by om) (by om)).cr (by oi)).ap
         (sAct M T q _))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
     · intro i _ _; exact S.i0
@@ -285,7 +291,7 @@ theorem dpS (T : Tape Γ) (q : Λ) :
   have := DB M q (T.nth 0)
   refine S.f1 _ (List.nodup_finRange _) _ (E Λ q) (List.mem_finRange _) ?_ ?_ ?_
   · simp only [Equiv.symm_apply_apply]
-    exact S.i1 ((dsS M T q).cq (by oi) fun _ _ _ ↦ .rfl)
+    exact S.i1 ((dsS M T q).cl (by oi))
   · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
   · intro i _ _; exact S.i0
 
@@ -295,12 +301,11 @@ theorem flS (T : Tape Γ) (q : Λ) :
   have := DB M q (T.nth 0)
   unfold fl
   by_cases h0 : (D M q (T.nth 0)).1 = 0
-  · exact (S.fN _ _ fun i _ ↦ S.i0).cq (fun _ _ _ ↦ .rfl) (by oi)
+  · exact (S.fN _ _ fun i _ ↦ S.i0).cr (by oi)
   · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = (D M q (T.nth 0)).1 :=
       ⟨⟨(D M q (T.nth 0)).1 - 1, by omega⟩, by simp only; omega⟩
     refine S.f1 _ (List.nodup_finRange _) _ i₀ (List.mem_finRange _) ?_ ?_ ?_
-    · exact S.i1 ((S.si (d := 0) (o := i₀) (by simp) (by om) (by om)).cq
-        (fun _ _ _ ↦ .rfl) (by oi))
+    · exact S.i1 ((S.si (d := 0) (o := i₀) (by simp) (by om) (by om)).cr (by oi))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
     · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
 
@@ -314,9 +319,9 @@ theorem caS (T : Tape Γ) (q : Λ) (d : ℤ) (hd : d = 1 ∨ d = -1) (k : ℕ) (
       j = 0 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) _ (List.nodup_finRange _) _ ⟨k, hk⟩
       (List.mem_finRange _) ?_ ?_ ?_).ap (S.i1
         (S.si (d := d) (o := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (by ring) (by om) (by om)))).ap
-      (S.bm d)).cq (fun _ _ _ ↦ .rfl) (by oi)
+      (S.bm d)).cr (by oi)
   · exact S.i1 ((S.si (d := d) (o := 2 * (card Γ - 1) + (card Λ - 1) + 1 + k) (by simp; ring)
-      (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi))
+      (by om) (by om)).cr (by oi))
   · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
   · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
 
@@ -327,12 +332,11 @@ theorem mvS (T : Tape Γ) (q : Λ) :
         (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
   have := DB M q (T.nth 0)
   by_cases hL : (D M q (T.nth 0)).2.2.2.1 = 1
-  · exact ((S.i1 ((caS M T q (-1) (by simp) _ this.2.1).cq (by oi)
-      fun _ _ _ ↦ .rfl)).ap (S.i0)).cq (fun _ _ _ ↦ .rfl) (by oi)
+  · exact ((S.i1 ((caS M T q (-1) (by simp) _ this.2.1).cl (by oi))).ap (S.i0)).cr (by oi)
   · by_cases hR : (D M q (T.nth 0)).2.2.2.2 = 1
     · exact ((S.i0).ap (S.i1 ((caS M T q 1 (by simp) _
-        this.2.1).cq (by oi) fun _ _ _ ↦ .rfl))).cq (fun _ _ _ ↦ .rfl) (by oi)
-    · exact ((S.i0).ap (S.i0)).cq (fun _ _ _ ↦ .rfl) (by oi)
+        this.2.1).cl (by oi)))).cr (by oi)
+    · exact ((S.i0).ap (S.i0)).cr (by oi)
 
 theorem cmS (T : Tape Γ) (q : Λ) :
     S (W M) (cm M) 0 (fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
@@ -344,10 +348,10 @@ theorem cmS (T : Tape Γ) (q : Λ) :
   by_cases hc : (D M q (T.nth 0)).2.2.1 = 1
   · refine S.f1 _ (List.nodup_finRange _) _ ⟨_, this.2.1⟩ (List.mem_finRange _) ?_ ?_ ?_
     · exact S.i1 ((S.si (d := 0) (o := 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1)
-        (by simp) (by om) (by om)).cq (fun _ _ _ ↦ .rfl) (by oi))
+        (by simp) (by om) (by om)).cr (by oi))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
     · intro i _ _; exact S.i0
-  · exact (S.fN _ _ fun i _ ↦ S.i0).cq (fun _ _ _ ↦ .rfl) fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
+  · exact (S.fN _ _ fun i _ ↦ S.i0).cr fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
 
 theorem bdS (T : Tape Γ) (q : Λ) :
     S (W M) (bd M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = 2 * (card Γ - 1) + E Λ q) 0
@@ -389,8 +393,7 @@ theorem it (q : Λ) (T : Tape Γ) (t : Tape Cell) (ht : H (W M) (Rf M) (tp M ⟨
       Reaches₁ step ⟨.loop (LB M) :: mv (-↑(Rf M)), t⟩ ⟨.loop (LB M) :: mv (-↑(Rf M)), u⟩ := by
   have h1 : tp M ⟨q, T⟩ 0 (Rf M) := Or.inr ⟨rfl, Or.inr rfl⟩
   obtain ⟨u, hu, r⟩ := ((((S.dec (d := 0) (o := Rf M) (by simp) (by simp [W, Rf]) h1).ap
-    (S.mo (c := 0) (x := -↑(Rf M)) (by simp))).ap ((bdS M T q).cq (by simp only [tp]; oi)
-      fun _ _ _ ↦ .rfl)).ap (S.mo (c := ↑(Rf M)) (x := ↑(Rf M)) (by simp))) t ht
+    (S.mo (c := 0) (x := -↑(Rf M)) (by simp))).ap ((bdS M T q).cl (by simp only [tp]; oi))).ap (S.mo (c := ↑(Rf M)) (x := ↑(Rf M)) (by simp))) t ht
   exact ⟨u, hu, .head' (by simp [step, LB, hd ht (d := 0) (o := Rf M) (by simp) (by simp [W, Rf]),
     h1]) (r _)⟩
 
