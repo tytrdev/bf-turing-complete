@@ -1,4 +1,4 @@
-import BfTuringComplete.Blocks
+import BfTuringComplete.Reference.Blocks
 
 /-!
 # Gadget specs over flag predicates

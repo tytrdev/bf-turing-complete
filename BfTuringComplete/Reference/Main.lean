@@ -1,5 +1,5 @@
-import BfTuringComplete.Statement
-import BfTuringComplete.Loop
+import BfTuringComplete.Core.Statement
+import BfTuringComplete.Reference.Loop
 import Mathlib.Data.Fintype.EquivFin
 
 /-!
@@ -127,3 +127,5 @@ theorem simulates_TM0 {Γ Λ : Type*} [Inhabited Γ] [Inhabited Λ] [Fintype Γ]
     exact congrArg ListBlank.mk (flatMap_map_enc n m eΓ l)
 
 end BF
+
+theorem BF.Reference.claim : BF.Claim := fun M ↦ BF.simulates_TM0 M

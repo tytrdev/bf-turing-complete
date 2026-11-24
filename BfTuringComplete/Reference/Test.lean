@@ -1,4 +1,4 @@
-import BfTuringComplete.Basic
+import BfTuringComplete.Core.Basic
 
 /-! Executable sanity checks for the semantics (not part of the proof). -/
 

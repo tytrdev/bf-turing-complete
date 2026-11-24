@@ -1,5 +1,5 @@
-import BfTuringComplete.Compile
-import BfTuringComplete.Test
+import BfTuringComplete.Reference.Compile
+import BfTuringComplete.Reference.Test
 
 /-! Differential tests: compiled BF vs. Mathlib's TM0 `step`, on small machines. -/
 

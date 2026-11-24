@@ -1,4 +1,4 @@
-import BfTuringComplete.Basic
+import BfTuringComplete.Core.Basic
 import Mathlib.Computability.TuringMachine.PostTuringMachine
 
 /-!

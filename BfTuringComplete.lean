@@ -1,11 +1,5 @@
-import BfTuringComplete.Basic
-import BfTuringComplete.Statement
-import BfTuringComplete.Compile
-import BfTuringComplete.Runs
-import BfTuringComplete.Blocks
-import BfTuringComplete.Spec
-import BfTuringComplete.Sim
-import BfTuringComplete.Loop
-import BfTuringComplete.Main
-import BfTuringComplete.Test
-import BfTuringComplete.CompileTest
+import BfTuringComplete.Core.Basic
+import BfTuringComplete.Core.Statement
+import BfTuringComplete.Reference.Main
+import BfTuringComplete.Reference.Test
+import BfTuringComplete.Reference.CompileTest

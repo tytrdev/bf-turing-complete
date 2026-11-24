@@ -1,4 +1,4 @@
-import BfTuringComplete.Spec
+import BfTuringComplete.Reference.Spec
 
 /-!
 # Correctness of the compiled step

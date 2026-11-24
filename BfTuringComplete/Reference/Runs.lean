@@ -1,4 +1,4 @@
-import BfTuringComplete.Compile
+import BfTuringComplete.Reference.Compile
 
 /-!
 # `Runs`: big-step reasoning derived from the small-step semantics

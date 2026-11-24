@@ -1,4 +1,4 @@
-import BfTuringComplete.Basic
+import BfTuringComplete.Core.Basic
 import Mathlib.Computability.TuringMachine.PostTuringMachine
 
 /-!
@@ -30,5 +30,20 @@ structure BlockCode (Γ : Type*) [Inhabited Γ] where
 def BlockCode.encTape {Γ : Type*} [Inhabited Γ] (c : BlockCode Γ) (L : ListBlank Γ) :
     ListBlank Cell :=
   L.flatMap c.enc ⟨c.width, c.enc_default⟩
+
+end BF
+
+namespace BF
+
+open Turing
+
+/-- **The claim.** BF simulates every finite TM0 machine: for some injective, fixed-width,
+blank-to-zero block code and some program, running the program on the encoded input gives
+exactly the encoded TM output, and runs forever exactly when the TM does.
+Every proof version must prove this. -/
+def Claim.{u, v} : Prop :=
+  ∀ {Γ : Type u} {Λ : Type v} [Inhabited Γ] [Inhabited Λ] [Fintype Γ] [Fintype Λ]
+    (M : TM0.Machine Γ Λ), ∃ (c : BlockCode Γ) (p : Program),
+      ∀ l : List Γ, eval p (l.flatMap c.enc) = (TM0.eval M l).map c.encTape
 
 end BF
