@@ -16,7 +16,7 @@ Score = Lean tokens (identifiers, numbers, keywords, operators each count 1; com
 2. `Exposition/`: most readable for humans, length irrelevant.
 3. `Elegant/`: as short as possible while staying elegant and readable.
 
-Baseline (chars / tokens): Reference = 38076 / 15793. Golf v1 (redesigned, not yet squashed) = 18711 / 10472.
+Current (chars / tokens): Reference = 38076 / 15793. Golf = 17572 / 9629 (v1 was 10472). Elegant = 21374 / 9712.
 
 ## Reference proof architecture
 Compiler (`Compile.lean`): one-hot blocks of width 2n+2m+6 per TM cell (sym, xsym, st, pend, T, ML, MR, R).
@@ -38,7 +38,12 @@ Proof: `Runs` (big-step from small-step) → `Holds` block view → `Spec` over 
 - A transition is one tuple `D q a`; `act` is five `if c then incAt x`, one lemma `S.oi`.
 - Use `card Γ - 1` inline, never a `def`/`abbrev` alias: omega reads `Fin` bounds off binder types, so aliases create unrelated atoms.
 
-## Next: token golf (Golf/G.lean, 10472 tokens)
+## Token golf log (Golf/G.lean)
+Done: auto-param side goals on `S.i0`/`S.i1` (-230), one-sided `S.cr`/`S.cl` (-28),
+named offsets `O M k`, `Pd M i`, `St M i` (-586). Tried and reverted: a finRange `S.fr`
+(explicit or auto-param no-op proofs both came out +20 tokens).
+
+Original plan (items 1 and 4 done):
 Biggest declarations: dsS 496, caS 491, ev 484, mvS 430, cmS 397, it 377, tmS 355, flS 317, r0 279.
 Planned structural cuts (names are free now):
 1. Name the repeated offsets (`Tf`, `ML`, `MR`, `Rf`, `pd k`, `st k`) and the transition projections
@@ -50,3 +55,24 @@ Planned structural cuts (names are free now):
 4. A tactic for the repeated `exact S.i0 (by om) (by om)` / `S.i1 (by om) (by om) .. (by om)` shapes.
 5. Look for a shorter `ev` (Part.ext with tr_eval/tr_eval_rev is ~480 tokens).
 Build note: Golf/G.lean takes ~35 s and sets maxHeartbeats 1000000.
+
+## Golf/Elegant lessons (session 2)
+- Tactic macros used as auto-params must be declared before the lemma, with
+  `set_option hygiene false in macro ...`, or the names in `simp only [...]` won't resolve.
+- Auto-params run *before* the surrounding term's metavariables are solved. They are fine on
+  `S.i0`/`S.i1` (o, P fixed by the program and context) but fail on `S.cq` (P'/Q' unknown); explicit
+  `(by oi)` is postponed to the end and works.
+- Build takes ~65 s since auto-params (was 31 s). Run builds in the background with a time cap.
+
+## Elegant (`Elegant/Elegant.lean`)
+Started as the Golf proof with readable names (`Spec`, `Holds`, `ifFlag`, `incAt`, `dispatch`,
+`flush`, `carry`, `commit`, ...). Then: transitions are a structure `Act` (`sym next go left right`),
+and the flags between phases are named (`start → dispatched → flushed → shifted → committed`),
+so each phase lemma is one line and `body_spec` is plain composition.
+Next for Elegant:
+1. One "exactly one `ifFlag` in the list fires" lemma over `finRange`, replacing `flatMap_one` +
+   the `intro i _ h; have := Fin.val_ne_of_ne h; exact Spec.ifOff` bullets.
+2. Module doc + docstrings on each gadget; split into Gadgets / Compiler / Correctness files.
+3. Shorter `eval_eq` (the Part.ext with tr_eval/tr_eval_rev).
+Then Exposition = Elegant plus prose, worked example, and a discussion of the statement's scope
+(TM0 vs partrec, two-sided tape, per-machine block code, right₀-only output, noncomputable compiler).
