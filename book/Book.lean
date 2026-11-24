@@ -11,7 +11,7 @@ set_option pp.rawOnError true
 
 #doc (Manual) "Brainfuck Simulates Turing Machines" =>
 %%%
-authors := ["Tyler Tracey"]
+authors := ["Ty Tracey"]
 shortTitle := "BF ⊇ TM"
 %%%
 
