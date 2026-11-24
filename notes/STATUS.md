@@ -100,3 +100,7 @@ Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 
 - Four chapters (Flag Machines, One Step, The Whole Run, A Worked Example); code blocks generated from
   the anchors' exact text; `anchorInfo` blocks check the `#eval` outputs. Deployed by
   `.github/workflows/book.yml` to GitHub Pages (Pages source: GitHub Actions).
+- Dark mode: `book/Book/Theme.lean`, wired in via `extraCss`/`extraJs` in `book/Main.lean`. Overrides Verso's
+  CSS variables plus the few hardcoded colors in `book.css`; follows the OS setting, with a header button
+  cycling auto/light/dark (stored in `localStorage`). Verso's search box is absolutely positioned at the
+  header's right edge, so the button carries a right margin of `--search-bar-width`.
