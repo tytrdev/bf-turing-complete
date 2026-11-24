@@ -138,6 +138,87 @@ theorem Holds.atFlag {f : F} {c : Program} (h : Holds 0 P t)
   obtain ⟨t₃, h₃, r₃⟩ := h₂.mv (-pos f)
   exact ⟨t₃, by simpa using h₃, (r₁.seq r₂).seq r₃⟩
 
+/-! ## Tapes of blocks
+
+A tape of symbols becomes a tape of cells by writing each symbol as the block of its flags. -/
+
+/-- The cells of a block whose raised flags are `S`. -/
+def block (S : F → Prop) : List Cell :=
+  (List.finRange (card F)).map fun i ↦ if S ((equivFin F).symm i) then 1 else 0
+
+theorem block_length (S : F → Prop) : (block S).length = card F := by simp [block]
+
+theorem block_getI (S : F → Prop) (f : F) : (block S).getI (pos f) = if S f then 1 else 0 := by
+  rw [block, List.getI_eq_getElem _ (by simpa using pos_lt f)]; simp [pos]
+
+theorem block_empty : block (fun _ : F ↦ False) = List.replicate (card F) default := by
+  simp [block, List.map_const', default]
+
+theorem card_pos [Nonempty F] : 0 < card F := Fintype.card_pos
+
+/-- Cell `card F * j + pos f` is flag `f` of block `j`, and every cell is one of these. -/
+theorem cell_split [Nonempty F] (i : ℕ) : ∃ (j : ℕ) (f : F), i = card F * j + pos f :=
+  ⟨i / card F, (equivFin F).symm ⟨i % card F, Nat.mod_lt _ card_pos⟩,
+    by simp [pos, Nat.div_add_mod]⟩
+
+variable {α : Type*} [Inhabited α] (cells : α → F → Prop)
+
+theorem flatMap_block_getI (hd : ∀ f, ¬cells default f) (l : List α) (j : ℕ) (f : F) :
+    (l.flatMap (block ∘ cells)).getI (card F * j + pos f) = if cells (l.getI j) f then 1 else 0 := by
+  induction l generalizing j with
+  | nil =>
+    rw [List.flatMap_nil, List.getI_nil, List.getI_nil]
+    simp [hd]
+  | cons a l ih =>
+    rw [List.flatMap_cons]
+    rcases j with _ | j
+    · rw [List.getI_append _ _ _ (by simpa [block_length] using pos_lt f), mul_zero, zero_add,
+        Function.comp, block_getI, List.getI_cons_zero]
+    · rw [List.getI_append_right _ _ _ (by simp [block_length]; nlinarith [pos_lt f]),
+        Function.comp, block_length, show card F * (j + 1) + pos f - card F = card F * j + pos f by
+          rw [Nat.mul_succ]; omega, ih, List.getI_cons_succ]
+
+theorem mk₁_nth (l : List α) (k : ℕ) : (Tape.mk₁ l).nth k = l.getI k := by
+  simp [Tape.mk₁, Tape.mk₂, ListBlank.nth_mk]
+
+theorem mk₁_nth_neg (l : List α) {i : ℤ} (hi : i < 0) : (Tape.mk₁ l).nth i = default := by
+  obtain ⟨k, rfl⟩ : ∃ k : ℕ, i = Int.negSucc k := ⟨(-i - 1).toNat, by rw [Int.negSucc_eq]; omega⟩
+  rfl
+
+/-- The encoded input tape stores the flags of the input. -/
+theorem holds_mk₁ (hd : ∀ f, ¬cells default f) (l : List α) :
+    Holds 0 {x | cells ((Tape.mk₁ l).nth x.1) x.2} (Tape.mk₁ (l.flatMap (block ∘ cells))) := by
+  intro j f
+  rw [sub_zero, Set.mem_ofPred_eq]
+  rcases lt_or_ge j 0 with hj | hj
+  · have : (card F : ℤ) * j + pos f < 0 := by
+      nlinarith [pos_lt f, mul_le_mul_of_nonneg_left (show j ≤ -1 by omega)
+        (Nat.cast_nonneg (α := ℤ) (card F))]
+    simp [mk₁_nth_neg _ this, mk₁_nth_neg _ hj, hd]
+  · obtain ⟨k, rfl⟩ := Int.eq_ofNat_of_zero_le hj
+    rw [show (card F : ℤ) * k + pos f = ((card F * k + pos f : ℕ) : ℤ) by push_cast; ring,
+      mk₁_nth, flatMap_block_getI cells hd, mk₁_nth]
+
+theorem block_default (hd : ∀ f, ¬cells default f) :
+    ∃ n, (block ∘ cells) default = List.replicate n default :=
+  ⟨card F, by rw [Function.comp, show cells default = fun _ ↦ False from
+    funext fun f ↦ propext ⟨hd f, False.elim⟩, block_empty]⟩
+
+/-- A tape storing the flags of `T` reads, from the head rightwards, as `T` encoded. -/
+theorem right₀_eq [Nonempty F] (hd : ∀ f, ¬cells default f) (T : Tape α) (t : Tape Cell)
+    (h : Holds 0 {x | cells (T.nth x.1) x.2} t) :
+    t.right₀ = T.right₀.flatMap (block ∘ cells) (block_default cells hd) := by
+  apply ListBlank.ext
+  intro i
+  obtain ⟨j, f, rfl⟩ := cell_split (F := F) i
+  have key : ∀ L : ListBlank α, (L.flatMap (block ∘ cells) (block_default cells hd)).nth
+      (card F * j + pos f) = if cells (L.nth j) f then 1 else 0 := fun L ↦ L.induction_on fun l ↦ by
+    simp only [ListBlank.flatMap_mk, ListBlank.nth_mk, flatMap_block_getI cells hd]; congr
+  have := h j f
+  rw [sub_zero, show (card F : ℤ) * j + pos f = ((card F * j + pos f : ℕ) : ℤ) by push_cast; ring]
+    at this
+  rw [Tape.right₀_nth, this, key, Tape.right₀_nth, Set.mem_ofPred_eq]
+
 /-! ## Flag programs -/
 
 /-- Flag programs over the flag type `F`. -/

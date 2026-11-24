@@ -52,6 +52,8 @@ instance : Fintype Fl :=
     cases x <;> cases y <;> first | rfl | simp_all [Flag.code] | (simp [Flag.code] at h; omega)
   Fintype.ofFinite _
 
+instance : Nonempty Fl := ⟨.run⟩
+
 /-! ## Running one program per element of a finite type -/
 
 /-- Run `g x` for every `x`, in some fixed order. -/
@@ -164,12 +166,15 @@ def stepProg : FProg Fl := dispatch M ⨾ flush ⨾ move ⨾ commit
 
 /-! ## The flag sets of TM configurations -/
 
+/-- The flags of a cell holding `a`: its symbol flag, unless `a` is the blank. -/
+def symFlags (a : Γ) (f : Fl) : Prop := f = .sym a ∧ a ≠ default
+
 /-- The symbols of tape `T`, as flags. -/
-def tapeSet (T : Tape Γ) : Set (ℤ × Fl) := {x | ∃ a, x.2 = .sym a ∧ a ≠ default ∧ T.nth x.1 = a}
+def tapeSet (T : Tape Γ) : Set (ℤ × Fl) := {x | symFlags (T.nth x.1) x.2}
 
 set_option hygiene false in
 /-- Membership goals about flag sets: unfold, then close by logic. -/
-macro "mem" : tactic => `(tactic| (simp [tapeSet, here, Tape.write_nth, Flag.dir] <;> aesop))
+macro "mem" : tactic => `(tactic| (simp [tapeSet, symFlags, here, Tape.write_nth, Flag.dir] <;> aesop))
 
 set_option hygiene false in
 /-- Equality of flag sets, by cases on the flag. -/
@@ -234,12 +239,12 @@ theorem move_den (d : Dir) (q : Λ) (T : Tape Γ) :
         rw [show (tapeSet T ∪ here [.left, .next q, .run]) \ {(0, .left)} =
           tapeSet T ∪ here [.next q, .run] by flags]
         exact carry_den (by simp) q T) (by mem), Option.bind_some, den_when_off (by mem)]
-    congr 2; ext ⟨j, f⟩; simp [tapeSet, Tape.move_left_nth, sub_eq_add_neg]
+    congr 2; ext ⟨j, f⟩; simp [tapeSet, symFlags, Tape.move_left_nth, sub_eq_add_neg]
   · rw [move, den_seq, den_when_off (by mem), Option.bind_some, den_when_on (by mem) (by
         rw [show (tapeSet T ∪ here [.right, .next q, .run]) \ {(0, .right)} =
           tapeSet T ∪ here [.next q, .run] by flags]
         exact carry_den (by simp) q T) (by mem)]
-    congr 2; ext ⟨j, f⟩; simp [tapeSet, Tape.move_right_nth]
+    congr 2; ext ⟨j, f⟩; simp [tapeSet, symFlags, Tape.move_right_nth]
 
 theorem commit_den (q : Λ) (T : Tape Γ) :
     commit.den (tapeSet T ∪ here [.next q, .run]) = some (tapeSet T ∪ here [.state q, .run]) := by
