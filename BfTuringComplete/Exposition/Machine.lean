@@ -48,6 +48,7 @@ namespace BF.Exposition
 open Turing FinEnum FProg
 
 /-- The flags of one block. -/
+-- ANCHOR: Flag
 inductive Flag (Γ Λ : Type*)
   | sym (a : Γ)
   | state (q : Λ)
@@ -58,6 +59,7 @@ inductive Flag (Γ Λ : Type*)
   | right
   | run
   deriving DecidableEq
+-- ANCHOR_END: Flag
 
 variable {Γ Λ : Type*}
 
@@ -99,10 +101,12 @@ def Flag.dir : Dir → Fl
 
 /-- The pending flags of a transition from a cell holding `a`: the symbol to write, then (unless
 the machine halts) the direction, the next state and `run`. -/
+-- ANCHOR: pend
 def pend : Option (Λ × TM0.Stmt Γ) → Γ → List Fl
   | none, a => [.write a]
   | some (q, .write b), _ => [.write b, .next q, .run]
   | some (q, .move d), a => [.write a, .dir d, .next q, .run]
+-- ANCHOR_END: pend
 
 @[simp] theorem sym_notMem_pend {o : Option (Λ × TM0.Stmt Γ)} {a b : Γ} : .sym b ∉ pend o a := by
   rcases o with _ | ⟨_, d | _⟩ <;> (try cases d) <;> simp [pend, Flag.dir]
@@ -158,9 +162,11 @@ variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
 
 /-- Phase 1: consume the state and the symbol under the head, raising the pending flags.
 The scratch flag `blank` catches the case that no symbol flag is set. -/
+-- ANCHOR: dispatch
 def dispatch : FProg Fl := all fun q ↦ .when (.state q) <|
   .set .blank ⨾ (all fun a ↦ .when (.sym a) (.clr .blank ⨾ raise (pend (M q a) a))) ⨾
     .when .blank (raise (pend (M q default) default))
+-- ANCHOR_END: dispatch
 
 theorem dispatch_den (q : Λ) (T : Tape Γ) :
     (dispatch M).den (tapeSet T ∪ here [.state q]) =
@@ -191,10 +197,12 @@ section Flush
 variable [FinEnum Γ]
 
 /-- Write symbol `a` into the current block (the blank needs no flag). -/
+-- ANCHOR: flush
 def put (a : Γ) : FProg Fl := if a = default then .skip else .set (.sym a)
 
 /-- Phase 2: turn the pending symbol into the cell's symbol. -/
 def flush : FProg Fl := all fun a ↦ .when (.write a) (put a)
+-- ANCHOR_END: flush
 
 theorem flush_den (T : Tape Γ) (b : Γ) (L : List Fl) (hL : ∀ c, .write c ∉ L)
     (hs : ∀ c, .sym c ∉ L) :
@@ -220,7 +228,9 @@ section Move
 variable [FinEnum Λ]
 
 /-- Carry the pending state and `run` one block in direction `d`, then follow them. -/
+-- ANCHOR: carry
 def carry (d : ℤ) : FProg Fl := (all fun q ↦ hop (.next q) d) ⨾ hop .run d ⨾ .shift d
+-- ANCHOR_END: carry
 
 theorem carry_den {d : ℤ} (hd : d ≠ 0) (q : Λ) (T : Tape Γ) :
     (carry d).den (tapeSet T ∪ here [.next q, .run]) =
@@ -231,7 +241,9 @@ theorem carry_den {d : ℤ} (hd : d ≠ 0) (q : Λ) (T : Tape Γ) :
   congr 1; flags
 
 /-- Phase 3: move. -/
+-- ANCHOR: move
 def move : FProg Fl := .when .left (carry (-1)) ⨾ .when .right (carry 1)
+-- ANCHOR_END: move
 
 theorem move_den_stay (T : Tape Γ) (L : List Fl) (hl : .left ∉ L) (hr : .right ∉ L) :
     move.den (tapeSet T ∪ here L) = some (tapeSet T ∪ here L) := by
@@ -253,7 +265,9 @@ theorem move_den (d : Dir) (q : Λ) (T : Tape Γ) :
     congr 2; ext ⟨j, f⟩; simp [tapeSet, symFlags, Tape.move_right_nth]
 
 /-- Phase 4: the pending state becomes the state. -/
+-- ANCHOR: commit
 def commit : FProg Fl := all fun q ↦ .when (.next q) (.set (.state q))
+-- ANCHOR_END: commit
 
 theorem commit_den (q : Λ) (T : Tape Γ) :
     commit.den (tapeSet T ∪ here [.next q, .run]) = some (tapeSet T ∪ here [.state q, .run]) := by
@@ -277,14 +291,18 @@ Chain the four phases. There are three cases, according to the transition `M q T
 variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
 
 /-- One TM step. -/
+-- ANCHOR: stepProg
 def stepProg : FProg Fl := dispatch M ⨾ flush ⨾ move ⨾ commit
+-- ANCHOR_END: stepProg
 
 /-- **Layer B.** One run of `stepProg` performs one TM step: if the machine halts, the state
 flag is gone and the tape unchanged; otherwise the new configuration, with `run` raised. -/
+-- ANCHOR: step_den
 theorem step_den (c : TM0.Cfg Γ Λ) :
     (stepProg M).den (cfgSet c) =
       some ((TM0.step M c).elim (tapeSet c.Tape)
         fun c' ↦ tapeSet c'.Tape ∪ here [.state c'.q, .run]) := by
+-- ANCHOR_END: step_den
   obtain ⟨q, T⟩ := c
   rw [stepProg, cfgSet, den_seq, dispatch_den, Option.bind_some, den_seq]
   simp only [TM0.step]

@@ -18,3 +18,5 @@ Three independent proofs of the claim, each self-contained:
 Scope: this is simulation of TM0 machines, not yet "computes every partial recursive function" (Mathlib's `PartrecToTM2` chain would bridge that). The tape is two-sided, unlike classic left-bounded Brainfuck. The compiler in `Exposition/` is computable for any explicitly enumerated (`FinEnum`) alphabet and state set.
 
 Build: `lake build`.
+
+The proof is also written up as a short book, built with [Verso](https://github.com/leanprover/verso) from `book/` (`cd book && lake exe book`) and published at https://tytrdev.github.io/bf-turing-complete/. Its code is drawn from `Exposition/` and checked on every build.

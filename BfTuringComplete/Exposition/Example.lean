@@ -21,6 +21,7 @@ set_option linter.hashCommand false
 open Turing
 
 /-- The swapping machine. -/
+-- ANCHOR: swap
 def swap : TM0.Machine (Fin 3) (Fin 4)
   | 0, 0 => some (2, .move .left)
   | 0, 1 => some (1, .write 2)
@@ -29,6 +30,7 @@ def swap : TM0.Machine (Fin 3) (Fin 4)
   | 2, 0 => some (3, .move .right)
   | 2, _ => some (2, .move .left)
   | _, _ => none
+-- ANCHOR_END: swap
 
 /-! ## The Brainfuck program -/
 
@@ -47,8 +49,12 @@ def swapBF : Program := program swap
 /-- Each TM cell becomes a block of this many BF cells, one per flag. -/
 def width : ℕ := FinEnum.card (Flag (Fin 3) (Fin 4))
 
+-- ANCHOR: width
 #eval width                         -- 18
+-- ANCHOR_END: width
+-- ANCHOR: length
 #eval (render swapBF).length
+-- ANCHOR_END: length
 #eval (render swapBF).take 300
 
 /-! The program is 4058 characters long. It starts `>>>[-]+<<<`: walk to the cell of
@@ -95,11 +101,17 @@ def bfOutput (input : List (Fin 3)) : Option (List (Fin 3)) :=
   (runBF 10000000 (init swapBF (input.flatMap (code (Λ := Fin 4)).enc))).map fun c ↦
     readBF (input.length + 1) c.tape
 
+-- ANCHOR: runTM
 #eval tmOutput [1, 2, 2]            -- some [2, 1, 1, 0]
+-- ANCHOR_END: runTM
+-- ANCHOR: runBF
 #eval bfOutput [1, 2, 2]            -- some [2, 1, 1, 0]
+-- ANCHOR_END: runBF
 
+-- ANCHOR: guard
 #guard bfOutput [1, 2, 2] = tmOutput [1, 2, 2]
 #guard bfOutput [2, 2, 1, 1] = tmOutput [2, 2, 1, 1]
 #guard bfOutput [] = tmOutput []
+-- ANCHOR_END: guard
 
 end BF.Exposition.Example

@@ -48,12 +48,14 @@ theorem enc_injective [FinEnum Γ] [FinEnum Λ] : Function.Injective (enc (Γ :=
   simp [enc, block_getI, symFlags, ha, hab] at this
 
 /-- The block code of symbols. -/
+-- ANCHOR: code
 def code [FinEnum Γ] [FinEnum Λ] : BlockCode Γ where
   width := card Fl
   enc := enc (Λ := Λ)
   length_enc _ := block_length _
   enc_default := by simp [enc, block, symFlags, List.map_const', default]
   injective := enc_injective
+-- ANCHOR_END: code
 
 theorem cfgSet_run (c : TM0.Cfg Γ Λ) :
     (cfgSet c ∪ here [.run]) \ {(0, .run)} = (cfgSet c : Set (ℤ × Fl)) := by
@@ -73,8 +75,10 @@ variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
 def mainLoop : Stmt := loopCode (Flag.run : Fl) (stepProg M)
 
 /-- The Brainfuck program simulating `M`. -/
+-- ANCHOR: program
 def program : Program :=
   (FProg.set (Flag.state default : Fl) ⨾ .set .run).compile ++ atFlag (Flag.run : Fl) [mainLoop M]
+-- ANCHOR_END: program
 
 /-- A running configuration: in the main loop, with `run` raised. -/
 def Running (c : TM0.Cfg Γ Λ) (t : Tape Cell) : Prop :=
@@ -82,9 +86,11 @@ def Running (c : TM0.Cfg Γ Λ) (t : Tape Cell) : Prop :=
 
 /-- How BF configurations track TM configurations: in the main loop while the machine runs,
 and finished with the encoded tape once it halts. -/
+-- ANCHOR: Tracks
 def Tracks (c : TM0.Cfg Γ Λ) (b : Cfg) : Prop :=
   TM0.step M c = none ∧ (∃ t, Holds 0 (tapeSet c.Tape : Set (ℤ × Fl)) t ∧ b = ⟨[], t⟩) ∨
   (TM0.step M c).isSome ∧ ∃ t, Running c t ∧ b = ⟨mainLoop M :: mv (-pos (Flag.run : Fl)), t⟩
+-- ANCHOR_END: Tracks
 
 /-- From a running configuration, the BF program reaches a configuration tracking it. -/
 theorem settle (c : TM0.Cfg Γ Λ) (t : Tape Cell) (h : Running c t) :
@@ -154,11 +160,13 @@ theorem eval_eq (l : List Γ) :
     · simp [(mem_eval.1 hc).2] at h
 
 /-- **Brainfuck simulates every finite TM0 machine.** -/
+-- ANCHOR: claim
 theorem claim : Claim := by
   intro Γ Λ _ _ _ _ M
   classical
   let _ : FinEnum Γ := .ofEquiv (Fin (Fintype.card Γ)) (Fintype.equivFin Γ)
   let _ : FinEnum Λ := .ofEquiv (Fin (Fintype.card Λ)) (Fintype.equivFin Λ)
   exact ⟨code, program M, eval_eq M⟩
+-- ANCHOR_END: claim
 
 end BF.Exposition

@@ -89,7 +89,7 @@ Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 
 - `Example.lean`: swap-1↔2-and-rewind TM over `Fin 3`/`Fin 4`; compiles to 4058 chars of BF;
   `runBF`/`runTM` with fuel; `#guard` checks BF output = TM output on three inputs (runs in ~2 s).
 
-## Verso book (`book/`, skeleton, 2026-11-24)
+## Verso book (`book/`, done, 2026-11-24)
 - Separate Lake package requiring only `verso` @ `v4.36.0` (no Mathlib). Build: `cd book && lake exe book`
   (first build compiles Verso, ~10+ min; later ~1 min). Output: `book/_out/html-multi/`.
 - Code is pulled from the main project via `-- ANCHOR: name` / `-- ANCHOR_END: name` comments
@@ -97,5 +97,6 @@ Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 
   `set_option verso.exampleProject "../"` and `verso.exampleModule`. The main repo requires `subverso`
   at the rev Verso pins (`no-modules/f9c40d40…`) for this. Anchor blocks must match the source text
   exactly; inline `{anchorTerm A}` must quote text that appears in anchor `A`.
-- Chapter 1 (Flag machines) only. Next: chapters for Machine / Main / Example (anchors in those
-  files), then a GitHub Pages deploy workflow (`lake exe book` in CI, upload `book/_out/html-multi`).
+- Four chapters (Flag Machines, One Step, The Whole Run, A Worked Example); code blocks generated from
+  the anchors' exact text; `anchorInfo` blocks check the `#eval` outputs. Deployed by
+  `.github/workflows/book.yml` to GitHub Pages (Pages source: GitHub Actions).
