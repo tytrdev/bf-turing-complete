@@ -16,6 +16,8 @@ the start, and halts.
 -/
 
 namespace BF.Exposition.Example
+
+set_option linter.hashCommand false
 open Turing
 
 /-- The swapping machine. -/
@@ -48,6 +50,11 @@ def width : ℕ := FinEnum.card (Flag (Fin 3) (Fin 4))
 #eval width                         -- 18
 #eval (render swapBF).length
 #eval (render swapBF).take 300
+
+/-! The program is 4058 characters long. It starts `>>>[-]+<<<`: walk to the cell of
+`state 0` (flag number 3 of block 0), set it, and walk back. Next comes the same for `run`, and then
+the main loop on `run`'s cell. The compiler makes no attempt at optimisation; you can see
+`<<<>>>`-style round trips where two instructions meet. -/
 
 /-! ## Running both machines
 

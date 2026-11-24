@@ -13,7 +13,8 @@ Three independent proofs of the claim, each self-contained:
 - **`Reference/`**: the first proof.
 - **`Golf/`**: as few Lean tokens as possible (`scripts/count.py`).
 - **`Elegant/`**: two layers. Brainfuck implements a small flag-machine language, proved once, and one TM step is a short flag program whose correctness is a set equation per phase.
+- **`Exposition/`**: the Elegant proof as a literate document, with prose throughout and a computable compiler. Start at [`Exposition/Flags.lean`](BfTuringComplete/Exposition/Flags.lean). [`Example.lean`](BfTuringComplete/Exposition/Example.lean) compiles a small Turing machine, prints the Brainfuck, runs it, and checks the result against the machine.
 
-Scope: this is simulation of TM0 machines, not yet "computes every partial recursive function" (Mathlib's `PartrecToTM2` chain would bridge that). The tape is two-sided, unlike classic left-bounded Brainfuck, and the compiler is noncomputable.
+Scope: this is simulation of TM0 machines, not yet "computes every partial recursive function" (Mathlib's `PartrecToTM2` chain would bridge that). The tape is two-sided, unlike classic left-bounded Brainfuck. The compiler in `Exposition/` is computable for any explicitly enumerated (`FinEnum`) alphabet and state set.
 
 Build: `lake build`.

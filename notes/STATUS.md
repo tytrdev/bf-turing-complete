@@ -16,7 +16,7 @@ Score = Lean tokens (identifiers, numbers, keywords, operators each count 1; com
 2. `Exposition/`: most readable for humans, length irrelevant.
 3. `Elegant/`: as short as possible while staying elegant and readable.
 
-Current (chars / tokens): Reference = 38076 / 15793. Golf = 17572 / 9629 (v1 was 10472). Elegant = 25392 / 10204 (with docs).
+Current (chars / tokens): Reference = 38076 / 15793. Golf = 17572 / 9629 (v1 was 10472). Elegant = 25392 / 10204 (with docs). Exposition = 37571 / 14284 (prose throughout).
 
 ## Reference proof architecture
 Compiler (`Compile.lean`): one-hot blocks of width 2n+2m+6 per TM cell (sym, xsym, st, pend, T, ML, MR, R).
@@ -78,5 +78,13 @@ Build note: Golf/G.lean takes ~35 s and sets maxHeartbeats 1000000.
   `Respects`, `eval_eq`, `claim`.
 Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 tokens).
 
-Then Exposition = Elegant plus prose, worked example, and a discussion of the statement's scope
-(TM0 vs partrec, two-sided tape, per-machine block code, right₀-only output, noncomputable compiler).
+## Exposition (done, 2026-11-24)
+`BF.Exposition.claim` proven (standard axioms). Elegant's proof, plus:
+- Computable compiler: `[FinEnum F]` instead of `[Fintype F]`; `Flag` derives `DecidableEq` and lists
+  its flags via `FinEnum.ofList`; `block` takes `[DecidablePred S]`; classical decidability only in
+  `den` (noncomputable, never run) and `Holds`. The claim builds `FinEnum` from `Fintype.equivFin`.
+  Lesson: a file-wide `attribute [local instance] Classical.propDecidable` outranks FinEnum's
+  `decEq` (priority 100) and silently makes defs noncomputable; keep it out of files with programs.
+- Literate prose in every file (four-part reading order: Flags, Machine, Main, Example).
+- `Example.lean`: swap-1↔2-and-rewind TM over `Fin 3`/`Fin 4`; compiles to 4058 chars of BF;
+  `runBF`/`runTM` with fuel; `#guard` checks BF output = TM output on three inputs (runs in ~2 s).

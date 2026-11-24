@@ -1,11 +1,22 @@
 import BfTuringComplete.Exposition.Machine
 
 /-!
-# Brainfuck simulates every TM0 machine
+# Brainfuck simulates Turing machines, part 3: the whole run
 
-The program raises `state default` and `run`, then loops on `run`: each pass clears `run` and
-performs one TM step (`step_den`), which raises `run` again unless the machine halted. The final
-tape holds exactly the TM's final tape in the block code `enc`.
+Part 2 showed that one run of the flag program `stepProg M` performs one step of `M`. Now we
+build the full Brainfuck program and prove the claim:
+
+```
+program M = (raise `state default` and `run`) ++ (while `run`: lower it, do one step)
+```
+
+The claim asks for two things. On an input where `M` halts, the program halts with exactly the
+encoded output. On an input where `M` runs forever, so does the program. Mathlib packages this
+kind of statement in `Turing.Respects`: give a relation between configurations of the two
+machines, show that every step of one is matched by one or more steps of the other, and the two
+`eval`s agree. Our relation is `Tracks`. While the TM runs, the Brainfuck program sits at the
+top of its main loop with the configuration's flags on the tape. Once the TM has halted, the
+program has finished and the tape holds exactly the TM's tape.
 -/
 
 namespace BF.Exposition
@@ -15,7 +26,13 @@ variable {Γ Λ : Type*} [Inhabited Γ]
 
 local notation "Fl" => Flag Γ Λ
 
-/-! ## The block code -/
+/-! ## The block code
+
+A symbol is written as the block of its flags: one cell per flag, with only the `sym a` cell set,
+or no cell at all for the blank. The block code must be injective, which the claim demands so that
+the encoding cannot hide information. Two different symbols differ in the cell of the non-blank
+one.
+-/
 
 theorem symFlags_default (f : Fl) : ¬symFlags (default : Γ) f := by simp [symFlags]
 
@@ -42,7 +59,12 @@ theorem cfgSet_run (c : TM0.Cfg Γ Λ) :
     (cfgSet c ∪ here [.run]) \ {(0, .run)} = (cfgSet c : Set (ℤ × Fl)) := by
   ext ⟨j, f⟩; cases f <;> simp [cfgSet, tapeSet, symFlags, here]
 
-/-! ## The main loop -/
+/-! ## The main loop
+
+`settle` covers both cases of `Tracks`. From the top of the loop, if the machine halts here, one
+more pass runs the halting step, which drops `run`, and the loop exits. Otherwise the current
+configuration already tracks. `respects` then says that each TM step is one pass of the loop.
+-/
 
 variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
 
@@ -90,8 +112,17 @@ theorem respects : Respects (TM0.step M) step (Tracks M) := by
       unfold Running; convert hu using 2; ext ⟨j, f⟩; cases f <;> simp [cfgSet, here])
     exact ⟨b', h', r.trans_left r'⟩
 
-/-! ## The claim -/
+/-! ## The claim
 
+The claim speaks of arbitrary `Fintype`s. The compiler wants an explicit enumeration (`FinEnum`),
+so we obtain one from `Fintype.equivFin`. That step is noncomputable, but it is the only one:
+for any concretely listed alphabet and state set, `program M` is an ordinary computable function,
+as `Example.lean` demonstrates.
+-/
+
+/-- Both halves of the claim, from `respects` and Mathlib's `tr_eval` / `tr_eval_rev`. The
+program first raises the initial flags and walks to the `run` cell, which puts it in a
+configuration that tracks `TM0.init l`. From there, the two `eval`s correspond. -/
 theorem eval_eq (l : List Γ) :
     eval (program M) (l.flatMap (code (Λ := Λ)).enc) =
       (TM0.eval M l).map (code (Λ := Λ)).encTape := by

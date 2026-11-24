@@ -1,19 +1,47 @@
 import BfTuringComplete.Exposition.Flags
 
 /-!
-# Layer B: flag machines implement TM0
+# Brainfuck simulates Turing machines, part 2: one step
 
-Each TM cell becomes a block of flags. `sym a` records the cell's symbol (the blank has no flag,
-so blank cells are all zero) and `state q` marks the head. One TM step is a flag program in four
-phases:
+Part 1 gave us flag programs, which Brainfuck runs faithfully. Here we write one step of a
+Turing machine `M` as a flag program and prove it correct. From now on we never look at a
+Brainfuck cell: everything is about which flags are raised in which block.
 
-1. **dispatch** on the state and symbol under the head, consuming both and raising the
-   transition's *pending* flags (`write a`, `next q`, `left`/`right`, `run`);
-2. **flush** the pending symbol into the cell;
-3. **move**: carry `next q` and `run` to the neighbouring block and shift there;
-4. **commit** the pending state.
+## The encoding
 
-The pending flags keep a phase from reacting to flags raised earlier in the same phase.
+Each cell of the TM tape is one block. Its flags (`Flag Γ Λ`) are:
+
+* `sym a`: the cell holds symbol `a`. The blank symbol gets no flag at all, so a blank cell is an
+  all-zero block. That is what lets the infinite blank parts of the two tapes match.
+* `state q`: the head is on this cell, and the machine is in state `q`.
+* `run`: the machine has not halted. The main loop in part 3 repeats while this is raised.
+* `write a`, `next q`, `left`, `right`: *pending* actions of the current transition.
+* `blank`: scratch space for one test.
+
+So the configuration "state `q`, tape `T`" is the flag set `cfgSet ⟨q, T⟩`: the symbol flags of
+`T`, plus `state q` in block 0, where the head is.
+
+## Why the step needs four phases
+
+The obvious program, "for each state and symbol, if they match, do the transition", has a trap.
+Flag programs test flags one at a time, in a fixed order. If the transition for symbol `a` writes
+symbol `b`, a later test of `sym b` in the same pass would fire as well and apply a second
+transition. Likewise, a state flag raised for the next step could be mistaken for the current
+state.
+
+The cure is to separate *deciding* from *doing*. The first phase only records what the transition
+will do, using flags that no test in that phase looks at. Later phases carry it out:
+
+1. **dispatch**: find the current state and symbol, consume both, and raise the pending flags
+   (`write a`, a direction, `next q`, `run`);
+2. **flush**: turn `write a` into the cell's symbol `sym a`;
+3. **move**: carry `next q` and `run` one block left or right, and move the head with them;
+4. **commit**: turn `next q` into `state q`.
+
+Each phase gets a lemma of the form "from these flags, the phase produces those flags". We always
+describe the flags as some TM tape plus a short list of flags at the head:
+`tapeSet T ∪ here [...]`. Composed, the four lemmas say that one step of the flag program is one
+step of the machine (`step_den`).
 -/
 
 namespace BF.Exposition
@@ -35,14 +63,20 @@ variable {Γ Λ : Type*}
 
 local notation "Fl" => Flag Γ Λ
 
-/-- All flags, listed: the enumeration that fixes each flag's cell within a block. -/
+/-- All flags, listed. This order fixes each flag's cell within a block. Listing them explicitly,
+rather than using an abstract `Fintype`, is what keeps the compiler computable. -/
 instance [FinEnum Γ] [FinEnum Λ] : FinEnum Fl :=
   .ofList ((toList Γ).map .sym ++ (toList Λ).map .state ++ [.blank] ++ (toList Γ).map .write ++
     (toList Λ).map .next ++ [.left, .right, .run]) fun f ↦ by cases f <;> simp
 
 instance : Nonempty Fl := ⟨.run⟩
 
-/-! ## Flags at the head, and the pending flags of a transition -/
+/-! ## Flags at the head, and the pending flags of a transition
+
+`here L` is the set of flags `L` in block 0, and `raise L` raises them. A transition's effect is
+recorded by `pend`. Note that a transition that moves or halts still writes back the symbol it
+read: dispatch consumed the symbol flag, so the symbol has to be put back.
+-/
 
 /-- The flags `L`, in the block under the head. -/
 def here (L : List Fl) : Set (ℤ × Fl) := {x | x.1 = 0 ∧ x.2 ∈ L}
@@ -80,7 +114,13 @@ def pend : Option (Λ × TM0.Stmt Γ) → Γ → List Fl
 @[simp] theorem blank_notMem_pend {o : Option (Λ × TM0.Stmt Γ)} {a : Γ} : .blank ∉ pend o a := by
   rcases o with _ | ⟨_, d | _⟩ <;> (try cases d) <;> simp [pend, Flag.dir]
 
-/-! ## The flag sets of TM configurations -/
+/-! ## The flag sets of TM configurations
+
+Two tactics do all the routine set reasoning in this file. Because flags are constructors, a
+statement like "`(0, next q')` is not in this set" unfolds to a disjunction of constructor
+equations, which `simp` and `aesop` settle. Equality of two flag sets is checked one flag
+constructor at a time.
+-/
 
 variable [Inhabited Γ]
 
@@ -102,7 +142,16 @@ set_option hygiene false in
 /-- Equality of flag sets, by cases on the flag. -/
 macro "flags" : tactic => `(tactic| (ext ⟨j, f⟩; cases f <;> mem))
 
-/-! ## Phase 1: dispatch -/
+/-! ## Phase 1: dispatch
+
+For each state `q`: if `state q` is raised (it is for exactly one `q`), lower it, and then find the
+symbol. Symbols have flags only when they are not blank, so the blank case is caught by elimination.
+Raise the scratch flag `blank`, let whichever `sym a` is present lower it, and if `blank` survives,
+the cell was blank.
+
+The lemma reads: starting from tape `T` in state `q`, dispatch leaves tape `T` with its head cell
+emptied (`T.write default`), plus the pending flags of the transition `M q T.head`.
+-/
 
 section Dispatch
 variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
@@ -132,7 +181,11 @@ theorem dispatch_den (q : Λ) (T : Tape Γ) :
 
 end Dispatch
 
-/-! ## Phase 2: flush -/
+/-! ## Phase 2: flush
+
+Exactly one `write b` is pending. It becomes the cell's symbol flag, or nothing if `b` is blank, so
+the head cell now holds `b`.
+-/
 
 section Flush
 variable [FinEnum Γ]
@@ -155,7 +208,13 @@ theorem flush_den (T : Tape Γ) (b : Γ) (L : List Fl) (hL : ∀ c, .write c ∉
 
 end Flush
 
-/-! ## Phases 3 and 4: move and commit -/
+/-! ## Phases 3 and 4: move and commit
+
+To move in direction `d`, `carry d` hops the pending state and `run` one block over and then
+shifts the head after them. The effect on the tape is a change of coordinates: block `j + d`
+becomes block `j`, which is what `Tape.move` does to a TM tape. If no direction is pending,
+nothing moves. Finally `commit` turns the pending state into the state flag.
+-/
 
 section Move
 variable [FinEnum Λ]
@@ -204,7 +263,16 @@ theorem commit_den (q : Λ) (T : Tape Γ) :
 
 end Move
 
-/-! ## One step -/
+/-! ## One step
+
+Chain the four phases. There are three cases, according to the transition `M q T.head`:
+
+* none (the machine halts): the symbol is written back, nothing moves, no state is committed. The
+  result is the bare tape `T` with no `run` flag, so the main loop stops.
+* write `b`: flush writes `b`, nothing moves, and commit raises `state q'` and `run`.
+* move `d`: flush writes back the old symbol, the move shifts everything, and commit raises
+  `state q'` and `run` in the new block.
+-/
 
 variable [Inhabited Λ] [FinEnum Γ] [FinEnum Λ] (M : TM0.Machine Γ Λ)
 

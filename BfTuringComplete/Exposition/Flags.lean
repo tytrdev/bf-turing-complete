@@ -4,24 +4,69 @@ import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Ring
 
 /-!
-# Layer A: Brainfuck implements flag machines
+# Brainfuck simulates Turing machines, part 1: flag machines
 
-A *flag machine* has a tape of blocks, and each block holds a set of flags drawn from a finite
-type `F`. Its state is therefore a set `P : Set (ℤ × F)` of (block, flag) pairs, relative to the
-block under the head. It has four instructions: set a flag, clear a flag, shift the head by whole
-blocks, and `when f p`, which runs `p` once if flag `f` is set (clearing `f` first).
+This is the first of four files proving `BF.Claim` (stated in `Core/Statement.lean`): for every
+finite Turing machine `M` there is a Brainfuck program that runs `M` on an encoded tape and leaves
+exactly the encoded result. They are meant to be read in order:
 
-Brainfuck implements this directly: block `j` is `card F` consecutive cells, the cell for flag `f`
-holds 1 or 0, `set` is `[-]+`, `clr` is `[-]` (both correct whatever the cell held), and
-`when f p` is the loop `[ [-] p ]` on `f`'s cell. The single theorem `compile_spec` says compiled
-code does to the tape what the flag program does to the flag set.
+1. `Flags.lean` (this file): Brainfuck can run a tiny language of *flag programs*.
+2. `Machine.lean`: one step of a Turing machine is a short flag program.
+3. `Main.lean`: loop the step until the machine halts, and read the answer off the tape.
+4. `Example.lean`: compile an actual machine, print the Brainfuck, and run it.
+
+## Why an intermediate language
+
+Brainfuck has only `+ - < > [ ]`, and nearly everything it does is arithmetic on positions: "move 37
+cells right, decrement". A direct proof that some Brainfuck program simulates a Turing machine
+becomes a proof about offsets and has to show again and again that cell 37 is not cell 38.
+
+So we split the work in two. This file builds a small language whose data is *flags*: yes/no
+facts such as "this cell holds the symbol `a`" or "the head is here, in state `q`". It proves once
+and for all that Brainfuck runs that language correctly. After that, the Turing machine part
+(`Machine.lean`) never mentions a Brainfuck cell again. It only reasons about which flags are
+raised where, and distinct flags are distinct because they are different constructors of an
+inductive type, not because two numbers differ.
+
+## The flag machine
+
+Fix a finite type `F` of flags. The tape of a flag machine is a sequence of *blocks*, one per
+position `j : ℤ`, and each block holds some subset of `F`. Its whole state is a set
+`P : Set (ℤ × F)` of (block, flag) pairs, measured from the block under the head. A flag program
+has five instructions:
+
+* `set f` / `clr f`: raise or lower flag `f` in the current block;
+* `shift d`: move the head `d` whole blocks;
+* `p ⨾ q`: sequencing;
+* `when f p`: if `f` is raised here, lower it and run `p` once.
+
+## Running it on Brainfuck
+
+Block `j` becomes `card F` consecutive cells, one per flag, holding `1` (raised) or `0`. Then:
+
+* `set f` is `[-]+` on `f`'s cell and `clr f` is `[-]`. `[-]` empties a cell whatever it held,
+  so neither needs a precondition such as "the cell was 0".
+* `shift d` is `card F * d` moves.
+* `when f p` is the loop `[ [-] p ]` on `f`'s cell. If the flag is down the loop is skipped.
+  If it is up, the body clears it and runs `p`, and then the loop exits provided `p` did not
+  raise `f` again. That proviso is the only side condition in the whole language.
+
+The main theorem of this file, `FProg.compile_spec`, says exactly this: compiled code does to the
+tape what the flag program does to the flag set.
 -/
 
 namespace BF.Exposition
 open Turing StateTransition Relation FinEnum
 attribute [local instance] Classical.propDecidable
 
-/-! ## Running code -/
+/-! ## Running code
+
+Mathlib's `StateTransition.Reaches step a b` says the configuration `b` is reached from `a`. For
+building programs out of pieces we want something composable: "code `p` turns tape `t` into
+tape `u`, *whatever code comes after it*". That is `Runs`. It composes by `Runs.seq`, and the
+lemmas below give it for the basic shapes we need: a single instruction, a loop that is
+skipped, a loop that runs exactly once, the clearing loop `[-]`, and a run of `>` or `<` moves.
+-/
 
 /-- Code `p` takes tape `t` to tape `u`, whatever code follows it. -/
 def Runs (p : Program) (t u : Tape Cell) : Prop := ∀ k, Reaches step ⟨p ++ k, t⟩ ⟨k, u⟩
@@ -45,7 +90,8 @@ theorem Runs.loopOnce (h : t.head ≠ 0) (g : Runs B t u) (h' : u.head = 0) : Ru
   fun k ↦ .head (b := ⟨B ++ .loop B :: k, t⟩) (by simp [step, h])
     ((g _).trans ((Runs.loopSkip h') k))
 
-/-- `[-]` clears the head cell, whatever it holds. -/
+/-- `[-]` clears the head cell, whatever it holds. The proof counts down: a cell holding `n + 1`
+is decremented and the loop repeats on `n`. Cells are `Fin 256`, so there are at most 255 rounds. -/
 theorem Runs.clear (t : Tape Cell) : Runs [.loop [.dec]] t (t.write 0) := by
   suffices ∀ n (t : Tape Cell), t.head.val = n → Runs [.loop [.dec]] t (t.write 0) from this _ t rfl
   intro n
@@ -82,7 +128,16 @@ theorem Runs.mv (x : ℤ) (t : Tape Cell) : ∃ u, Runs (mv x) t u ∧ ∀ i, u.
       (by simp [sub_eq_add_neg]) (-x).toNat t
     exact ⟨u, r, fun i ↦ by rw [e]; congr 1; omega⟩
 
-/-! ## Flag programs -/
+/-! ## Flag programs
+
+The meaning of a flag program is a function from flag sets to flag sets. It is partial in exactly
+one way: `when f p` must not leave `f` raised. Otherwise the Brainfuck loop it compiles to would run
+`p` again, and the one-shot reading would be wrong. We model that failure with `Option`.
+
+This meaning, `den`, is a mathematical object, not a program. It decides set membership
+classically, which is harmless because nothing ever runs it. The compiler further down is an
+ordinary computable function.
+-/
 
 section Programs
 variable {F : Type*}
@@ -122,7 +177,17 @@ noncomputable def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
 @[simp] theorem den_seq (p q : FProg F) (P : Set (ℤ × F)) : (p ⨾ q).den P = (p.den P).bind q.den :=
   rfl
 
-/-! ### Derived forms -/
+/-! ### Derived forms
+
+Two patterns recur in the Turing machine step.
+
+* `all g` runs `g x` for every element `x` of a finite type. A typical use is
+  `all fun q ↦ when (state q) (...)`, which tests each possible state in turn. The useful facts:
+  if every `g x` leaves the flags alone, so does `all g` (`den_all_skip`), and if only `g a` does
+  anything, `all g` does what `g a` does (`den_all`). Each is a short induction on the list.
+* `hop f d` moves flag `f` from the current block to the block `d` away. Moving the head means
+  carrying the head's flags to the neighbouring block.
+-/
 
 /-- Run `g x` for every `x`, in some fixed order. -/
 def all {α : Type*} [FinEnum α] (g : α → FProg F) : FProg F :=
@@ -186,7 +251,22 @@ theorem den_hop {f : F} {d : ℤ} (hd : d ≠ 0) {P : Set (ℤ × F)} (h : (0, f
 end FProg
 end Programs
 
-/-! ## Flag sets on the tape -/
+/-! ## Flag sets on the tape
+
+Now we fix how flags sit on the Brainfuck tape. `FinEnum F` numbers the flags `0, 1, …, card F - 1`.
+Flag `f` of block `j` lives in cell `card F * j + pos f`:
+
+```
+          block -1             block 0              block 1
+   … | f₀ f₁ … f_{n-1} | f₀ f₁ … f_{n-1} | f₀ f₁ … f_{n-1} | …
+                         ^ cell 0
+```
+
+`Holds b P t` says that tape `t` stores the flag set `P`, with the head `b` cells into block 0.
+Between flag-program instructions the head sits at the start of block 0 (`b = 0`). While an
+instruction runs, it visits a flag's cell (`b = pos f`). Moving the head only changes `b`
+(`Holds.mv`), so we never have to describe how the tape itself shifts.
+-/
 
 variable {F : Type*} [FinEnum F]
 
@@ -211,7 +291,8 @@ theorem cell_eq {j : ℤ} {f g : F} : (card F : ℤ) * j + pos g - pos f = 0 ↔
     exact ⟨rfl, (equiv (α := F)).injective (Fin.ext h)⟩
   · rintro ⟨rfl, rfl⟩; simp
 
-/-- Tape `t` stores flag set `P`, with the head `b` cells into block 0. -/
+/-- Tape `t` stores flag set `P`, with the head `b` cells into block 0: the cell of flag `f` in
+block `j` holds 1 if `(j, f) ∈ P` and 0 otherwise. -/
 def Holds (b : ℤ) (P : Set (ℤ × F)) (t : Tape Cell) : Prop :=
   ∀ j f, t.nth (card F * j + pos f - b) = if (j, f) ∈ P then 1 else 0
 
@@ -245,7 +326,16 @@ theorem Holds.atFlag {f : F} {c : Program} (h : Holds 0 P t)
 
 /-! ## Tapes of blocks
 
-A tape of symbols becomes a tape of cells by writing each symbol as the block of its flags. -/
+The claim is about tapes of *symbols*, encoded block by block. Here we connect the two views
+generically: if each symbol `a` is written as the block whose raised flags are `cells a`, then
+
+* the encoded input tape `Tape.mk₁ (l.flatMap …)` stores the flags of the input (`holds_mk₁`), and
+* any tape storing the flags of a symbol tape `T` reads, from the head rightwards, as `T` encoded
+  (`right₀_eq`). That is the shape of the output the claim asks for.
+
+We need one assumption: the blank symbol raises no flags. Then blank cells are all zero, so the
+infinite blank parts of the two tapes line up.
+-/
 
 /-- The cells of a block whose raised flags are `S`. -/
 def block (S : F → Prop) [DecidablePred S] : List Cell :=
@@ -253,7 +343,8 @@ def block (S : F → Prop) [DecidablePred S] : List Cell :=
 
 theorem block_length (S : F → Prop) [DecidablePred S] : (block S).length = card F := by simp [block]
 
-theorem block_getI (S : F → Prop) [DecidablePred S] (f : F) : (block S).getI (pos f) = if S f then 1 else 0 := by
+theorem block_getI (S : F → Prop) [DecidablePred S] (f : F) :
+    (block S).getI (pos f) = if S f then 1 else 0 := by
   rw [block, List.getI_eq_getElem _ (by simpa using pos_lt f)]; simp [pos]
 
 theorem block_empty : block (fun _ : F ↦ False) = List.replicate (card F) default := by
@@ -293,7 +384,8 @@ theorem mk₁_nth_neg (l : List α) {i : ℤ} (hi : i < 0) : (Tape.mk₁ l).nth 
 
 /-- The encoded input tape stores the flags of the input. -/
 theorem holds_mk₁ (hd : ∀ f, ¬cells default f) (l : List α) :
-    Holds 0 {x | cells ((Tape.mk₁ l).nth x.1) x.2} (Tape.mk₁ (l.flatMap (fun a ↦ block (cells a)))) := by
+    Holds 0 {x | cells ((Tape.mk₁ l).nth x.1) x.2}
+      (Tape.mk₁ (l.flatMap (fun a ↦ block (cells a)))) := by
   intro j f
   rw [sub_zero, Set.mem_ofPred_eq]
   rcases lt_or_ge j 0 with hj | hj
@@ -326,7 +418,23 @@ theorem right₀_eq [Nonempty F] (hd : ∀ f, ¬cells default f) (T : Tape α) (
   rw [Tape.right₀_nth, this, key, Tape.right₀_nth, Set.mem_ofPred_eq]
   congr
 
-/-! ## Compiling flag programs -/
+/-! ## Compiling flag programs
+
+The compiler follows the plan from the top of the file. Every instruction except `shift` is code
+that walks to its flag's cell (`atFlag`), does something there, and walks back, so the head is at
+the start of block 0 again.
+
+The proof of `compile_spec` is by induction on the program, with one short argument per case:
+
+* `set`, `clr`: `[-]` empties the cell, and `+` makes it 1. `Holds.write` says that rewriting one
+  cell changes exactly one flag.
+* `shift d`: the moves change the viewing offset by `card F * d`, which is the same as renaming
+  block `j + d` to block `j`. That renaming is the preimage in `den`.
+* `p ⨾ q`: compose.
+* `when f p`: if `f` is down, the cell is 0 and the loop is skipped. If it is up, one pass of the
+  body (`pass`) clears `f`, walks back to the block start, runs `p` by induction, and returns to
+  `f`'s cell. That cell is now 0 by the side condition, so the loop exits.
+-/
 
 namespace FProg
 
@@ -390,6 +498,15 @@ where
     obtain ⟨t₂, h₂, r₂⟩ := compile_spec p e (by simpa using h₁)
     obtain ⟨t₃, h₃, r₃⟩ := h₂.mv (pos f)
     exact ⟨t₃, by simpa using h₃, (Runs.clear t).seq ((r₁.seq r₂).seq r₃)⟩
+
+/-! ### `when` as a `while` loop
+
+The main program in `Main.lean` loops on the flag `run`. Each pass performs one Turing machine
+step, and the step raises `run` again unless the machine halted. That loop is the compiled code of
+`when run step`, but its body deliberately re-raises its own flag, so `den` reads it as a failure.
+The two lemmas below describe the same loop one pass at a time instead, which is what a
+`while` loop needs.
+-/
 
 /-- The loop of `when f p` as a `while` loop: if `f` is set, one pass of the body. -/
 theorem loop_pass (p : FProg F) {f : F} {P R : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∈ P)
