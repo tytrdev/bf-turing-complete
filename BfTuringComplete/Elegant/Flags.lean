@@ -165,6 +165,14 @@ def den : FProg F → Set (ℤ × F) → Option (Set (ℤ × F))
     if (0, f) ∈ P then (p.den (P \ {(0, f)})).bind fun Q ↦ if (0, f) ∈ Q then none else some Q
     else some P
 
+@[simp] theorem den_skip (P : Set (ℤ × F)) : (skip : FProg F).den P = some P := rfl
+@[simp] theorem den_set (f : F) (P : Set (ℤ × F)) : (set f).den P = some (insert (0, f) P) := rfl
+@[simp] theorem den_clr (f : F) (P : Set (ℤ × F)) : (clr f).den P = some (P \ {(0, f)}) := rfl
+@[simp] theorem den_shift (d : ℤ) (P : Set (ℤ × F)) :
+    (shift d).den P = some ((fun x ↦ (x.1 + d, x.2)) ⁻¹' P) := rfl
+@[simp] theorem den_seq (p q : FProg F) (P : Set (ℤ × F)) : (p ⨾ q).den P = (p.den P).bind q.den :=
+  rfl
+
 /-- The Brainfuck code of a flag program. -/
 def compile : FProg F → Program
   | skip => []
