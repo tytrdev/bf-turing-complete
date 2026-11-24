@@ -113,7 +113,7 @@ theorem S.l1 (hb : b = w * d + o) (ho : o < w) (h1 : P d o) (hB : S w B b P b Q)
 
 set_option hygiene false in
 macro "om" : tactic => `(tactic|
-  (simp (config := { failIfUnchanged := false }) only [sy, S0, NX, AP, RP, W, Rf, ne_eq,
+  (simp (config := { failIfUnchanged := false }) only [sy, S0, NX, AP, RP, W, Rf, O, Pd, St, ne_eq,
     false_and, and_false, false_or, or_false, iff_def, false_implies, imp_false, true_and,
     and_true, not_true_eq_false, not_false_eq_true, true_or, or_true, true_implies,
     implies_true, and_self, or_self, eq_self_iff_true, Fin.val_mk, iff_self] at * <;> omega))
@@ -188,6 +188,9 @@ variable {Γ Λ : Type*} [Inhabited Γ] [Inhabited Λ] [Fintype Γ] [Fintype Λ]
 
 def W (M : TM0.Machine Γ Λ) := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 6
 def Rf (M : TM0.Machine Γ Λ) := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5
+def O (M : TM0.Machine Γ Λ) (k : ℕ) : ℕ := 2 * (card Γ - 1) + 2 * (card Λ - 1) + k
+def Pd (M : TM0.Machine Γ Λ) (i : ℕ) : ℕ := 2 * (card Γ - 1) + (card Λ - 1) + 1 + i
+def St (M : TM0.Machine Γ Λ) (i : ℕ) : ℕ := 2 * (card Γ - 1) + i
 
 /-- What a transition does: (new symbol, next state, continues?, moves left?, moves right?). -/
 def D (q : Λ) (a : Γ) : ℕ × ℕ × ℕ × ℕ × ℕ :=
@@ -204,38 +207,38 @@ theorem DB (q : Λ) (a : Γ) : (D M q a).1 < (card Γ - 1) + 1 ∧ (D M q a).2.1
 
 def act (q : Λ) (a : Γ) : Program :=
   (if (D M q a).1 ≠ 0 then ia ((card Γ - 1) + (D M q a).1 - 1 : ℕ) else []) ++
-  (if (D M q a).2.2.2.1 = 1 then ia (2 * (card Γ - 1) + 2 * (card Λ - 1) + 3 : ℕ) else []) ++
-  (if (D M q a).2.2.2.2 = 1 then ia (2 * (card Γ - 1) + 2 * (card Λ - 1) + 4 : ℕ) else []) ++
-  (if (D M q a).2.2.1 = 1 then ia (2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q a).2.1 : ℕ) else []) ++
-  (if (D M q a).2.2.1 = 1 then ia (2 * (card Γ - 1) + 2 * (card Λ - 1) + 5 : ℕ) else [])
+  (if (D M q a).2.2.2.1 = 1 then ia (O M 3 : ℕ) else []) ++
+  (if (D M q a).2.2.2.2 = 1 then ia (O M 4 : ℕ) else []) ++
+  (if (D M q a).2.2.1 = 1 then ia (Pd M (D M q a).2.1 : ℕ) else []) ++
+  (if (D M q a).2.2.1 = 1 then ia (O M 5 : ℕ) else [])
 
 def ds (q : Λ) : Program :=
-  ia (2 * (card Γ - 1) + 2 * (card Λ - 1) + 2 : ℕ) ++ (List.finRange ((card Γ - 1))).flatMap (fun i : Fin _ ↦
-    IF i (da (2 * (card Γ - 1) + 2 * (card Λ - 1) + 2 : ℕ) ++ act M q ((E Γ).symm i.succ))) ++
-  IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 2) (act M q default)
+  ia (O M 2 : ℕ) ++ (List.finRange ((card Γ - 1))).flatMap (fun i : Fin _ ↦
+    IF i (da (O M 2 : ℕ) ++ act M q ((E Γ).symm i.succ))) ++
+  IF (O M 2) (act M q default)
 
-def dp : Program := (List.finRange ((card Λ - 1) + 1)).flatMap fun i : Fin _ ↦ IF (2 * (card Γ - 1) + i) (ds M ((E Λ).symm i))
+def dp : Program := (List.finRange ((card Λ - 1) + 1)).flatMap fun i : Fin _ ↦ IF (St M i) (ds M ((E Λ).symm i))
 def fl (_ : TM0.Machine Γ Λ) : Program := (List.finRange ((card Γ - 1))).flatMap fun i : Fin _ ↦ IF ((card Γ - 1) + i) (ia (i : ℕ))
 def cb (d : ℤ) : Program :=
   (List.finRange ((card Λ - 1) + 1)).flatMap (fun i : Fin _ ↦
-    IF (2 * (card Γ - 1) + (card Λ - 1) + 1 + i) (ia (↑(2 * (card Γ - 1) + (card Λ - 1) + 1 + i : ℕ) + ↑(W M) * d))) ++
-  IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (ia (↑(2 * (card Γ - 1) + 2 * (card Λ - 1) + 5 : ℕ) + ↑(W M) * d)) ++ mv (↑(W M) * d)
-def cm (_ : TM0.Machine Γ Λ) : Program :=
-  (List.finRange ((card Λ - 1) + 1)).flatMap fun i : Fin _ ↦ IF (2 * (card Γ - 1) + (card Λ - 1) + 1 + i) (ia (2 * (card Γ - 1) + i : ℕ))
+    IF (Pd M i) (ia (↑(Pd M i : ℕ) + ↑(W M) * d))) ++
+  IF (O M 5) (ia (↑(O M 5 : ℕ) + ↑(W M) * d)) ++ mv (↑(W M) * d)
+def cm : Program :=
+  (List.finRange ((card Λ - 1) + 1)).flatMap fun i : Fin _ ↦ IF (Pd M i) (ia (St M i : ℕ))
 def bd : Program :=
-  dp M ++ fl M ++ (IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 3) (cb M (-1)) ++ IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 4) (cb M 1)) ++
+  dp M ++ fl M ++ (IF (O M 3) (cb M (-1)) ++ IF (O M 4) (cb M 1)) ++
     cm M
 def pg : Program :=
-  ia (2 * (card Γ - 1) + E Λ default : ℕ) ++ ia (2 * (card Γ - 1) + 2 * (card Λ - 1) + 5 : ℕ) ++ IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (bd M)
+  ia (St M (E Λ default) : ℕ) ++ ia (O M 5 : ℕ) ++ IF (O M 5) (bd M)
 
 /-! ## Flag predicates -/
 
 def sy (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop := r + 1 = E Γ (T.nth j)
 
 def RP (q : Λ) (a : Γ) (r : ℕ) : Prop :=
-  (D M q a).2.2.2.1 = 1 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 3 ∨ (D M q a).2.2.2.2 = 1 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 4 ∨
-  (D M q a).2.2.1 = 1 ∧ r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q a).2.1 ∨
-  (D M q a).2.2.1 = 1 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5
+  (D M q a).2.2.2.1 = 1 ∧ r = O M 3 ∨ (D M q a).2.2.2.2 = 1 ∧ r = O M 4 ∨
+  (D M q a).2.2.1 = 1 ∧ r = Pd M (D M q a).2.1 ∨
+  (D M q a).2.2.1 = 1 ∧ r = O M 5
 
 def AP (q : Λ) (a : Γ) (r : ℕ) : Prop :=
   (D M q a).1 ≠ 0 ∧ r = (card Γ - 1) + (D M q a).1 - 1 ∨ RP M q a r
@@ -263,8 +266,8 @@ theorem sAct (T : Tape Γ) (q : Λ) (a : Γ) :
 theorem dsS (T : Tape Γ) (q : Λ) :
     S (W M) (ds M q) 0 (sy T) 0 fun j r ↦ j ≠ 0 ∧ sy T j r ∨ j = 0 ∧ AP M q (T.nth 0) r := by
   have := DB M q (T.nth 0)
-  have I := S.si (w := W M) (P := sy T) (d := 0) (o := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 2)
-    (x := (2 * (card Γ - 1) + 2 * (card Λ - 1) + 2 : ℕ)) (by simp)
+  have I := S.si (w := W M) (P := sy T) (d := 0) (o := O M 2)
+    (x := (O M 2 : ℕ)) (by simp)
     (by om) (by om)
   unfold ds
   by_cases ha : (E Γ (T.nth 0) : ℕ) = 0
@@ -286,7 +289,7 @@ theorem dsS (T : Tape Γ) (q : Λ) :
     · intro i _ _; exact S.i0
 
 theorem dpS (T : Tape Γ) (q : Λ) :
-    S (W M) (dp M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = 2 * (card Γ - 1) + E Λ q) 0
+    S (W M) (dp M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = St M (E Λ q)) 0
       fun j r ↦ j ≠ 0 ∧ sy T j r ∨ j = 0 ∧ AP M q (T.nth 0) r := by
   have := DB M q (T.nth 0)
   refine S.f1 _ (List.nodup_finRange _) _ (E Λ q) (List.mem_finRange _) ?_ ?_ ?_
@@ -311,25 +314,25 @@ theorem flS (T : Tape Γ) (q : Λ) :
 
 theorem caS (T : Tape Γ) (q : Λ) (d : ℤ) (hd : d = 1 ∨ d = -1) (k : ℕ) (hk : k < (card Λ - 1) + 1) :
     S (W M) (cb M d) 0 (fun j r ↦ S0 M q T j r ∨ j = 0 ∧
-        (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + k ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5)) 0
+        (r = Pd M k ∨ r = O M 5)) 0
       fun j r ↦ S0 M q T (j + d) r ∨ j = 0 ∧
-        (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + k ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
+        (r = Pd M k ∨ r = O M 5) := by
   have := DB M q (T.nth 0)
-  refine (((S.f1 (Q := fun j r ↦ j = d ∧ r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + k ∨ S0 M q T j r ∨
-      j = 0 ∧ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) _ (List.nodup_finRange _) _ ⟨k, hk⟩
+  refine (((S.f1 (Q := fun j r ↦ j = d ∧ r = Pd M k ∨ S0 M q T j r ∨
+      j = 0 ∧ r = O M 5) _ (List.nodup_finRange _) _ ⟨k, hk⟩
       (List.mem_finRange _) ?_ ?_ ?_).ap (S.i1
-        (S.si (d := d) (o := 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) (by ring) (by om) (by om)))).ap
+        (S.si (d := d) (o := O M 5) (by ring) (by om) (by om)))).ap
       (S.bm d)).cr (by oi)
-  · exact S.i1 ((S.si (d := d) (o := 2 * (card Γ - 1) + (card Λ - 1) + 1 + k) (by simp; ring)
+  · exact S.i1 ((S.si (d := d) (o := Pd M k) (by simp; ring)
       (by om) (by om)).cr (by oi))
   · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
   · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
 
 theorem mvS (T : Tape Γ) (q : Λ) :
-    S (W M) (IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 3) (cb M (-1)) ++ IF (2 * (card Γ - 1) + 2 * (card Λ - 1) + 4) (cb M 1)) 0
+    S (W M) (IF (O M 3) (cb M (-1)) ++ IF (O M 4) (cb M 1)) 0
       (fun j r ↦ S0 M q T j r ∨ j = 0 ∧ RP M q (T.nth 0) r) 0
       fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
+        (r = Pd M (D M q (T.nth 0)).2.1 ∨ r = O M 5) := by
   have := DB M q (T.nth 0)
   by_cases hL : (D M q (T.nth 0)).2.2.2.1 = 1
   · exact ((S.i1 ((caS M T q (-1) (by simp) _ this.2.1).cl (by oi))).ap (S.i0)).cr (by oi)
@@ -340,23 +343,23 @@ theorem mvS (T : Tape Γ) (q : Λ) :
 
 theorem cmS (T : Tape Γ) (q : Λ) :
     S (W M) (cm M) 0 (fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = 2 * (card Γ - 1) + (card Λ - 1) + 1 + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5)) 0
+        (r = Pd M (D M q (T.nth 0)).2.1 ∨ r = O M 5)) 0
       fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
+        (r = St M ((D M q (T.nth 0)).2.1) ∨ r = O M 5) := by
   have := DB M q (T.nth 0)
   unfold cm
   by_cases hc : (D M q (T.nth 0)).2.2.1 = 1
   · refine S.f1 _ (List.nodup_finRange _) _ ⟨_, this.2.1⟩ (List.mem_finRange _) ?_ ?_ ?_
-    · exact S.i1 ((S.si (d := 0) (o := 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1)
+    · exact S.i1 ((S.si (d := 0) (o := St M ((D M q (T.nth 0)).2.1))
         (by simp) (by om) (by om)).cr (by oi))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0
     · intro i _ _; exact S.i0
   · exact (S.fN _ _ fun i _ ↦ S.i0).cr fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
 
 theorem bdS (T : Tape Γ) (q : Λ) :
-    S (W M) (bd M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = 2 * (card Γ - 1) + E Λ q) 0
+    S (W M) (bd M) 0 (fun j r ↦ sy T j r ∨ j = 0 ∧ r = St M (E Λ q)) 0
       fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5) := by
+        (r = St M ((D M q (T.nth 0)).2.1) ∨ r = O M 5) := by
   rw [bd]; exact (((dpS M T q).ap (flS M T q)).ap (mvS M T q)).ap (cmS M T q)
 
 /-! ## TM steps, the loop, and the claim -/
@@ -385,11 +388,11 @@ theorem tmS (q : Λ) (T : Tape Γ) :
 def LB : Program := .dec :: mv (-↑(Rf M)) ++ bd M ++ mv ↑(Rf M)
 
 def tp (c : TM0.Cfg Γ Λ) (j : ℤ) (r : ℕ) : Prop :=
-  sy c.Tape j r ∨ j = 0 ∧ (r = 2 * (card Γ - 1) + E Λ c.q ∨ r = Rf M)
+  sy c.Tape j r ∨ j = 0 ∧ (r = St M (E Λ c.q) ∨ r = Rf M)
 
 theorem it (q : Λ) (T : Tape Γ) (t : Tape Cell) (ht : H (W M) (Rf M) (tp M ⟨q, T⟩) t) :
     ∃ u, H (W M) (Rf M) (fun j r ↦ NX M q T j r ∨ j = 0 ∧ (D M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = 2 * (card Γ - 1) + (D M q (T.nth 0)).2.1 ∨ r = 2 * (card Γ - 1) + 2 * (card Λ - 1) + 5)) u ∧
+        (r = St M ((D M q (T.nth 0)).2.1) ∨ r = O M 5)) u ∧
       Reaches₁ step ⟨.loop (LB M) :: mv (-↑(Rf M)), t⟩ ⟨.loop (LB M) :: mv (-↑(Rf M)), u⟩ := by
   have h1 : tp M ⟨q, T⟩ 0 (Rf M) := Or.inr ⟨rfl, Or.inr rfl⟩
   obtain ⟨u, hu, r⟩ := ((((S.dec (d := 0) (o := Rf M) (by simp) (by simp [W, Rf]) h1).ap
@@ -427,7 +430,7 @@ theorem rs : Respects (TM0.step M) step (TR M) := by
   · rcases h with ⟨h, -⟩ | ⟨-, t, ht, rfl⟩
     · simp [hs] at h
     obtain ⟨u, hu, r⟩ := it M q T t ht
-    obtain ⟨c₂, h, r'⟩ := lt M c' u (hu.cq fun j r _ ↦ by simp only [tp, hT, hq, hc, Rf, true_and])
+    obtain ⟨c₂, h, r'⟩ := lt M c' u (hu.cq fun j r _ ↦ by simp only [tp, hT, hq, hc, Rf, O, true_and])
     exact ⟨c₂, h, r.trans_left r'⟩
 
 def en (a : Γ) : List Cell := (List.range (W M)).map fun i ↦ if i + 1 = (E Γ a : ℕ) then 1 else 0
@@ -508,14 +511,14 @@ theorem r0 (T : Tape Γ) (t : Tape Cell) (h : H (W M) 0 (sy T) t) :
 
 theorem ev (l : List Γ) : eval (pg M) (l.flatMap (en M)) =
     (TM0.eval M l).map fun L ↦ L.flatMap (en M) ⟨W M, ed M⟩ := by
-  obtain ⟨t1, ht1, hr1⟩ := ((S.si (d := 0) (o := 2 * (card Γ - 1) + E Λ default)
-    (x := (2 * (card Γ - 1) + E Λ default : ℕ)) (by simp) (by om) (by om)).ap
+  obtain ⟨t1, ht1, hr1⟩ := ((S.si (d := 0) (o := St M (E Λ default))
+    (x := (St M (E Λ default) : ℕ)) (by simp) (by om) (by om)).ap
     ((S.si (d := 0) (o := Rf M) (x := (Rf M : ℕ)) (by simp) (by om) (by om)).ap
       (S.mo (c := ↑(Rf M)) (x := ↑(Rf M)) (by simp)))) _ (ih M l)
   obtain ⟨c₂, htr, hr⟩ := lt M (TM0.init l) t1 (ht1.cq (by simp only [tp, TM0.init]; oi))
   have h0 : Reaches step (init (pg M) (l.flatMap (en M))) ⟨.loop (LB M) :: mv (-↑(Rf M)), t1⟩ := by
     have := hr1 ([.loop (LB M)] ++ mv (-↑(Rf M)))
-    simpa [init, pg, IF, LB, Rf, List.append_assoc] using this
+    simpa [init, pg, IF, LB, Rf, O, List.append_assoc] using this
   have e1 := reaches_eval (h0.trans hr)
   unfold eval TM0.eval
   rw [e1]
