@@ -182,6 +182,12 @@ def compile : FProg F → Program
   | p ⨾ q => p.compile ++ q.compile
   | when f p => atFlag f [.loop (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f))]
 
+/-- The Brainfuck loop that `when f p` compiles to, run from `f`'s cell. -/
+def loopCode (f : F) (p : FProg F) : Stmt :=
+  .loop (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f))
+
+theorem compile_when (f : F) (p : FProg F) : (when f p).compile = atFlag f [loopCode f p] := rfl
+
 /-- **Layer A.** Compiled code does to the tape what the program does to the flag set. -/
 theorem compile_spec : ∀ (p : FProg F) {P Q : Set (ℤ × F)} {t : Tape Cell},
     p.den P = some Q → Holds 0 P t → ∃ u, Holds 0 Q u ∧ Runs p.compile t u
@@ -212,15 +218,32 @@ theorem compile_spec : ∀ (p : FProg F) {P Q : Set (ℤ × F)} {t : Tape Cell},
     · obtain ⟨R, e₁, e₂⟩ := Option.bind_eq_some_iff.1 e
       split_ifs at e₂ with hR
       cases e₂
-      have hc := ht.write (Q := P \ {(0, f)}) fun x hx ↦ by simp [hx]
-      rw [if_neg (by simp)] at hc
-      obtain ⟨t₁, h₁, r₁⟩ := hc.mv (-pos f)
-      obtain ⟨t₂, h₂, r₂⟩ := compile_spec p e₁ (by simpa using h₁)
-      obtain ⟨t₃, h₃, r₃⟩ := h₂.mv (pos f)
-      have h₃' : Holds (pos f) Q t₃ := by simpa using h₃
-      exact ⟨t₃, h₃', Runs.loopOnce (by simp [ht.head, hf])
-        ((Runs.clear t).seq ((r₁.seq r₂).seq r₃)) (by simp [h₃'.head, hR])⟩
+      obtain ⟨u, hu, r⟩ := pass p hf e₁ ht
+      exact ⟨u, hu, Runs.loopOnce (by simp [ht.head, hf]) r (by simp [hu.head, hR])⟩
     · cases e; exact ⟨t, ht, Runs.loopSkip (by simp [ht.head, hf])⟩
+where
+  /-- One pass of the loop body: clear `f`, run `p` from the block start, return to `f`. -/
+  pass (p : FProg F) {f : F} {P R : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∈ P)
+      (e : p.den (P \ {(0, f)}) = some R) (ht : Holds (pos f) P t) :
+      ∃ u, Holds (pos f) R u ∧ Runs (.loop [.dec] :: mv (-pos f) ++ p.compile ++ mv (pos f)) t u := by
+    have hc := ht.write (Q := P \ {(0, f)}) fun x hx ↦ by simp [hx]
+    rw [if_neg (by simp)] at hc
+    obtain ⟨t₁, h₁, r₁⟩ := hc.mv (-pos f)
+    obtain ⟨t₂, h₂, r₂⟩ := compile_spec p e (by simpa using h₁)
+    obtain ⟨t₃, h₃, r₃⟩ := h₂.mv (pos f)
+    exact ⟨t₃, by simpa using h₃, (Runs.clear t).seq ((r₁.seq r₂).seq r₃)⟩
+
+/-- The loop of `when f p` as a `while` loop: if `f` is set, one pass of the body. -/
+theorem loop_pass (p : FProg F) {f : F} {P R : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∈ P)
+    (e : p.den (P \ {(0, f)}) = some R) (ht : Holds (pos f) P t) (k : Program) :
+    ∃ u, Holds (pos f) R u ∧ TransGen (fun a b ↦ b ∈ step a) ⟨loopCode f p :: k, t⟩ ⟨loopCode f p :: k, u⟩ := by
+  obtain ⟨u, hu, r⟩ := compile_spec.pass p hf e ht
+  exact ⟨u, hu, .head' (by simp [step, loopCode, ht.head, hf]) (r _)⟩
+
+/-- … and if `f` is clear, the loop ends. -/
+theorem loop_exit (p : FProg F) {f : F} {P : Set (ℤ × F)} {t : Tape Cell} (hf : (0, f) ∉ P)
+    (ht : Holds (pos f) P t) (k : Program) : Reaches step ⟨loopCode f p :: k, t⟩ ⟨k, t⟩ :=
+  .single (by simp [step, loopCode, ht.head, hf])
 
 end FProg
 end BF.Elegant
