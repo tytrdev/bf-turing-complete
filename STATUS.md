@@ -10,7 +10,7 @@
 ## Compression exercises
 Each lives in its own folder and namespace and must end with `theorem ... : BF.Claim`.
 Everything except `Core/` is free, including the compiler and the encoding.
-Score = non-whitespace characters, comments included. Also tracked: Lean tokens (identifiers count 1 regardless of length).
+Score = Lean tokens (identifiers, numbers, keywords, operators each count 1; comments included). Names are free, so use readable ones. Characters are still printed for reference only.
 
 1. `Golf/`: shortest possible, readability irrelevant.
 2. `Exposition/`: most readable for humans, length irrelevant.
@@ -37,3 +37,16 @@ Proof: `Runs` (big-step from small-step) → `Holds` block view → `Spec` over 
 - Compiles over Γ/Λ directly via `E : α ≃ Fin (card α - 1 + 1)` with `default ↦ 0` (no relabelling layer).
 - A transition is one tuple `D q a`; `act` is five `if c then incAt x`, one lemma `S.oi`.
 - Use `card Γ - 1` inline, never a `def`/`abbrev` alias: omega reads `Fin` bounds off binder types, so aliases create unrelated atoms.
+
+## Next: token golf (Golf/G.lean, 10472 tokens)
+Biggest declarations: dsS 496, caS 491, ev 484, mvS 430, cmS 397, it 377, tmS 355, flS 317, r0 279.
+Planned structural cuts (names are free now):
+1. Name the repeated offsets (`Tf`, `ML`, `MR`, `Rf`, `pd k`, `st k`) and the transition projections
+   (`cont M q T := (D M q (T.nth 0)).2.2.1`, etc.) as defs unfolded by `om`. Never alias inside `Fin` types.
+2. Name the phase states (`afterDispatch`, `afterFlush`, `afterMove`, `afterCommit`) so each phase
+   statement is a single line and `bdS` is pure composition.
+3. A finRange-specialised `S.f1` whose no-op side conditions are arithmetic (`i.val ≠ a.val → ¬P 0 (g i)`),
+   discharged by `om` directly; drop the repeated `intro i _ h; have := Fin.val_ne_of_ne h; exact S.i0 ..`.
+4. A tactic for the repeated `exact S.i0 (by om) (by om)` / `S.i1 (by om) (by om) .. (by om)` shapes.
+5. Look for a shorter `ev` (Part.ext with tr_eval/tr_eval_rev is ~480 tokens).
+Build note: Golf/G.lean takes ~35 s and sets maxHeartbeats 1000000.
