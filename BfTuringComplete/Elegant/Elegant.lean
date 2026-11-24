@@ -113,7 +113,7 @@ theorem Spec.iter (hb : b = w * d + o) (ho : o < w) (h1 : P d o) (hB : Spec w B 
 
 set_option hygiene false in
 macro "arith" : tactic => `(tactic|
-  (simp (config := { failIfUnchanged := false }) only [symFlag, written, moved, actFlags, pendFlags, width, runOff, off, pendOff, stateOff, ne_eq,
+  (simp (config := { failIfUnchanged := false }) only [symFlag, written, moved, actFlags, pendFlags, start, dispatched, flushed, shifted, committed, width, runOff, off, pendOff, stateOff, ne_eq,
     false_and, and_false, false_or, or_false, iff_def, false_implies, imp_false, true_and,
     and_true, not_true_eq_false, not_false_eq_true, true_or, or_true, true_implies,
     implies_true, and_self, or_self, eq_self_iff_true, Fin.val_mk, iff_self] at * <;> omega))
@@ -192,25 +192,34 @@ def off (M : TM0.Machine Γ Λ) (k : ℕ) : ℕ := 2 * (card Γ - 1) + 2 * (card
 def pendOff (M : TM0.Machine Γ Λ) (i : ℕ) : ℕ := 2 * (card Γ - 1) + (card Λ - 1) + 1 + i
 def stateOff (M : TM0.Machine Γ Λ) (i : ℕ) : ℕ := 2 * (card Γ - 1) + i
 
-/-- What a transition does: (new symbol, next state, continues?, moves left?, moves right?). -/
-def tr (q : Λ) (a : Γ) : ℕ × ℕ × ℕ × ℕ × ℕ :=
-  match M q a with
-  | none => (idx Γ a, 0, 0, 0, 0)
-  | some (q', .move .left) => (idx Γ a, idx Λ q', 1, 1, 0)
-  | some (q', .move .right) => (idx Γ a, idx Λ q', 1, 0, 1)
-  | some (q', .write b) => (idx Γ b, idx Λ q', 1, 0, 0)
+/-- What one TM transition does, as numbers: the symbol to write, the next state, whether the
+machine continues (`go`), and whether it moves left or right (each 0 or 1). -/
+structure Act where
+  sym : ℕ
+  next : ℕ
+  go : ℕ
+  left : ℕ
+  right : ℕ
 
-theorem tr_bounds (q : Λ) (a : Γ) : (tr M q a).1 < (card Γ - 1) + 1 ∧ (tr M q a).2.1 < (card Λ - 1) + 1 ∧
-    (tr M q a).2.2.1 ≤ 1 ∧ (tr M q a).2.2.2.1 + (tr M q a).2.2.2.2 ≤ (tr M q a).2.2.1 ∧
-    ((tr M q a).2.2.1 = 0 ∨ (tr M q a).2.2.2.1 + (tr M q a).2.2.2.2 = 1 → (tr M q a).1 = idx Γ a) := by
+/-- The transition of `M` in state `q` reading `a`. -/
+def tr (q : Λ) (a : Γ) : Act :=
+  match M q a with
+  | none => ⟨idx Γ a, 0, 0, 0, 0⟩
+  | some (q', .move .left) => ⟨idx Γ a, idx Λ q', 1, 1, 0⟩
+  | some (q', .move .right) => ⟨idx Γ a, idx Λ q', 1, 0, 1⟩
+  | some (q', .write b) => ⟨idx Γ b, idx Λ q', 1, 0, 0⟩
+
+theorem tr_bounds (q : Λ) (a : Γ) : (tr M q a).sym < (card Γ - 1) + 1 ∧ (tr M q a).next < (card Λ - 1) + 1 ∧
+    (tr M q a).go ≤ 1 ∧ (tr M q a).left + (tr M q a).right ≤ (tr M q a).go ∧
+    ((tr M q a).go = 0 ∨ (tr M q a).left + (tr M q a).right = 1 → (tr M q a).sym = idx Γ a) := by
   unfold tr; rcases M q a with _ | ⟨q', d | b⟩ <;> (try cases d) <;> simp
 
 def actProg (q : Λ) (a : Γ) : Program :=
-  (if (tr M q a).1 ≠ 0 then incAt ((card Γ - 1) + (tr M q a).1 - 1 : ℕ) else []) ++
-  (if (tr M q a).2.2.2.1 = 1 then incAt (off M 3 : ℕ) else []) ++
-  (if (tr M q a).2.2.2.2 = 1 then incAt (off M 4 : ℕ) else []) ++
-  (if (tr M q a).2.2.1 = 1 then incAt (pendOff M (tr M q a).2.1 : ℕ) else []) ++
-  (if (tr M q a).2.2.1 = 1 then incAt (off M 5 : ℕ) else [])
+  (if (tr M q a).sym ≠ 0 then incAt ((card Γ - 1) + (tr M q a).sym - 1 : ℕ) else []) ++
+  (if (tr M q a).left = 1 then incAt (off M 3 : ℕ) else []) ++
+  (if (tr M q a).right = 1 then incAt (off M 4 : ℕ) else []) ++
+  (if (tr M q a).go = 1 then incAt (pendOff M (tr M q a).next : ℕ) else []) ++
+  (if (tr M q a).go = 1 then incAt (off M 5 : ℕ) else [])
 
 def dispatchSym (q : Λ) : Program :=
   incAt (off M 2 : ℕ) ++ (List.finRange ((card Γ - 1))).flatMap (fun i : Fin _ ↦
@@ -236,21 +245,44 @@ def program : Program :=
 def symFlag (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop := r + 1 = idx Γ (T.nth j)
 
 def pendFlags (q : Λ) (a : Γ) (r : ℕ) : Prop :=
-  (tr M q a).2.2.2.1 = 1 ∧ r = off M 3 ∨ (tr M q a).2.2.2.2 = 1 ∧ r = off M 4 ∨
-  (tr M q a).2.2.1 = 1 ∧ r = pendOff M (tr M q a).2.1 ∨
-  (tr M q a).2.2.1 = 1 ∧ r = off M 5
+  (tr M q a).left = 1 ∧ r = off M 3 ∨ (tr M q a).right = 1 ∧ r = off M 4 ∨
+  (tr M q a).go = 1 ∧ r = pendOff M (tr M q a).next ∨
+  (tr M q a).go = 1 ∧ r = off M 5
 
 def actFlags (q : Λ) (a : Γ) (r : ℕ) : Prop :=
-  (tr M q a).1 ≠ 0 ∧ r = (card Γ - 1) + (tr M q a).1 - 1 ∨ pendFlags M q a r
+  (tr M q a).sym ≠ 0 ∧ r = (card Γ - 1) + (tr M q a).sym - 1 ∨ pendFlags M q a r
 
 def written (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
-  j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ r + 1 = (tr M q (T.nth 0)).1
+  j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ r + 1 = (tr M q (T.nth 0)).sym
 
 def moved (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
-  (tr M q (T.nth 0)).2.2.2.1 = 1 ∧ written M q T (j + -1) r ∨
-  (tr M q (T.nth 0)).2.2.2.2 = 1 ∧ written M q T (j + 1) r ∨
-  (tr M q (T.nth 0)).2.2.2.1 = 0 ∧ (tr M q (T.nth 0)).2.2.2.2 = 0 ∧ written M q T j r
+  (tr M q (T.nth 0)).left = 1 ∧ written M q T (j + -1) r ∨
+  (tr M q (T.nth 0)).right = 1 ∧ written M q T (j + 1) r ∨
+  (tr M q (T.nth 0)).left = 0 ∧ (tr M q (T.nth 0)).right = 0 ∧ written M q T j r
 
+/-! ## The flags between the phases of one step, in state `q` on tape `T` -/
+
+/-- Before the step: the tape's symbols, plus the state flag at the head. -/
+def start (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
+  symFlag T j r ∨ j = 0 ∧ r = stateOff M (idx Λ q)
+
+/-- After dispatch: head symbol and state are replaced by the transition's action flags. -/
+def dispatched (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
+  j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ actFlags M q (T.nth 0) r
+
+/-- After flush: the new symbol is written; the pending flags remain. -/
+def flushed (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
+  written M q T j r ∨ j = 0 ∧ pendFlags M q (T.nth 0) r
+
+/-- After the move: the pending state and run flag sit at the new head. -/
+def shifted (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
+  moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).go = 1 ∧
+    (r = pendOff M (tr M q (T.nth 0)).next ∨ r = off M 5)
+
+/-- After commit: the pending state has become the state flag. -/
+def committed (q : Λ) (T : Tape Γ) (j : ℤ) (r : ℕ) : Prop :=
+  moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).go = 1 ∧
+    (r = stateOff M (tr M q (T.nth 0)).next ∨ r = off M 5)
 
 /-! ## Phases -/
 
@@ -264,12 +296,12 @@ theorem actProg_spec (T : Tape Γ) (q : Λ) (a : Γ) :
   all_goals first | arith | arith_flags
 
 theorem dispatchSym_spec (T : Tape Γ) (q : Λ) :
-    Spec (width M) (dispatchSym M q) 0 (symFlag T) 0 fun j r ↦ j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ actFlags M q (T.nth 0) r := by
+    Spec (width M) (dispatchSym M q) 0 (symFlag T) 0 (dispatched M q T) := by
   have := tr_bounds M q (T.nth 0)
   have I := Spec.inc_at (w := width M) (P := symFlag T) (d := 0) (o := off M 2)
     (x := (off M 2 : ℕ)) (by simp)
     (by arith) (by arith)
-  unfold dispatchSym
+  unfold dispatchSym dispatched
   by_cases ha : (idx Γ (T.nth 0) : ℕ) = 0
   · have e : T.nth 0 = default := (idx Γ).injective (Fin.ext (by rw [ha, idx_default]; rfl))
     refine (I.seq (Spec.flatMap_id _ _ fun i _ ↦ Spec.ifOff)).seq ?_
@@ -289,8 +321,8 @@ theorem dispatchSym_spec (T : Tape Γ) (q : Λ) :
     · intro i _ _; exact Spec.ifOff
 
 theorem dispatch_spec (T : Tape Γ) (q : Λ) :
-    Spec (width M) (dispatch M) 0 (fun j r ↦ symFlag T j r ∨ j = 0 ∧ r = stateOff M (idx Λ q)) 0
-      fun j r ↦ j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ actFlags M q (T.nth 0) r := by
+    Spec (width M) (dispatch M) 0 (start M q T) 0
+      (dispatched M q T) := by
   have := tr_bounds M q (T.nth 0)
   refine Spec.flatMap_one _ (List.nodup_finRange _) _ (idx Λ q) (List.mem_finRange _) ?_ ?_ ?_
   · simp only [Equiv.symm_apply_apply]
@@ -299,14 +331,14 @@ theorem dispatch_spec (T : Tape Γ) (q : Λ) :
   · intro i _ _; exact Spec.ifOff
 
 theorem flush_spec (T : Tape Γ) (q : Λ) :
-    Spec (width M) (flush M) 0 (fun j r ↦ j ≠ 0 ∧ symFlag T j r ∨ j = 0 ∧ actFlags M q (T.nth 0) r) 0
-      fun j r ↦ written M q T j r ∨ j = 0 ∧ pendFlags M q (T.nth 0) r := by
+    Spec (width M) (flush M) 0 (dispatched M q T) 0
+      (flushed M q T) := by
   have := tr_bounds M q (T.nth 0)
   unfold flush
-  by_cases h0 : (tr M q (T.nth 0)).1 = 0
+  by_cases h0 : (tr M q (T.nth 0)).sym = 0
   · exact (Spec.flatMap_id _ _ fun i _ ↦ Spec.ifOff).post (by arith_flags)
-  · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = (tr M q (T.nth 0)).1 :=
-      ⟨⟨(tr M q (T.nth 0)).1 - 1, by omega⟩, by simp only; omega⟩
+  · obtain ⟨i₀, hi⟩ : ∃ i₀ : Fin ((card Γ - 1)), i₀.val + 1 = (tr M q (T.nth 0)).sym :=
+      ⟨⟨(tr M q (T.nth 0)).sym - 1, by omega⟩, by simp only; omega⟩
     refine Spec.flatMap_one _ (List.nodup_finRange _) _ i₀ (List.mem_finRange _) ?_ ?_ ?_
     · exact Spec.ifOn ((Spec.inc_at (d := 0) (o := i₀) (by simp) (by arith) (by arith)).post (by arith_flags))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact Spec.ifOff
@@ -330,44 +362,40 @@ theorem carry_spec (T : Tape Γ) (q : Λ) (d : ℤ) (hd : d = 1 ∨ d = -1) (k :
 
 theorem move_spec (T : Tape Γ) (q : Λ) :
     Spec (width M) (ifFlag (off M 3) (carry M (-1)) ++ ifFlag (off M 4) (carry M 1)) 0
-      (fun j r ↦ written M q T j r ∨ j = 0 ∧ pendFlags M q (T.nth 0) r) 0
-      fun j r ↦ moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = pendOff M (tr M q (T.nth 0)).2.1 ∨ r = off M 5) := by
+      (flushed M q T) 0
+      (shifted M q T) := by
   have := tr_bounds M q (T.nth 0)
-  by_cases hL : (tr M q (T.nth 0)).2.2.2.1 = 1
+  by_cases hL : (tr M q (T.nth 0)).left = 1
   · exact ((Spec.ifOn ((carry_spec M T q (-1) (by simp) _ this.2.1).pre (by arith_flags))).seq (Spec.ifOff)).post (by arith_flags)
-  · by_cases hR : (tr M q (T.nth 0)).2.2.2.2 = 1
+  · by_cases hR : (tr M q (T.nth 0)).right = 1
     · exact ((Spec.ifOff).seq (Spec.ifOn ((carry_spec M T q 1 (by simp) _
         this.2.1).pre (by arith_flags)))).post (by arith_flags)
     · exact ((Spec.ifOff).seq (Spec.ifOff)).post (by arith_flags)
 
 theorem commit_spec (T : Tape Γ) (q : Λ) :
-    Spec (width M) (commit M) 0 (fun j r ↦ moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = pendOff M (tr M q (T.nth 0)).2.1 ∨ r = off M 5)) 0
-      fun j r ↦ moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = stateOff M ((tr M q (T.nth 0)).2.1) ∨ r = off M 5) := by
+    Spec (width M) (commit M) 0 (shifted M q T) 0
+      (committed M q T) := by
   have := tr_bounds M q (T.nth 0)
   unfold commit
-  by_cases hc : (tr M q (T.nth 0)).2.2.1 = 1
+  by_cases hc : (tr M q (T.nth 0)).go = 1
   · refine Spec.flatMap_one _ (List.nodup_finRange _) _ ⟨_, this.2.1⟩ (List.mem_finRange _) ?_ ?_ ?_
-    · exact Spec.ifOn ((Spec.inc_at (d := 0) (o := stateOff M ((tr M q (T.nth 0)).2.1))
+    · exact Spec.ifOn ((Spec.inc_at (d := 0) (o := stateOff M (tr M q (T.nth 0)).next)
         (by simp) (by arith) (by arith)).post (by arith_flags))
     · intro i _ h; have := Fin.val_ne_of_ne h; exact Spec.ifOff
     · intro i _ _; exact Spec.ifOff
-  · exact (Spec.flatMap_id _ _ fun i _ ↦ Spec.ifOff).post fun _ _ _ ↦ by simp only [hc, false_and, and_false, or_false]
+  · exact (Spec.flatMap_id _ _ fun i _ ↦ Spec.ifOff).post fun _ _ _ ↦ by simp only [shifted, committed, hc, false_and, and_false, or_false]
 
 theorem body_spec (T : Tape Γ) (q : Λ) :
-    Spec (width M) (body M) 0 (fun j r ↦ symFlag T j r ∨ j = 0 ∧ r = stateOff M (idx Λ q)) 0
-      fun j r ↦ moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = stateOff M ((tr M q (T.nth 0)).2.1) ∨ r = off M 5) := by
+    Spec (width M) (body M) 0 (start M q T) 0
+      (committed M q T) := by
   rw [body]; exact (((dispatch_spec M T q).seq (flush_spec M T q)).seq (move_spec M T q)).seq (commit_spec M T q)
 
 /-! ## TM steps, the loop, and the claim -/
 
 theorem tm_step (q : Λ) (T : Tape Γ) :
-    (TM0.step M ⟨q, T⟩ = none ∧ (tr M q (T.nth 0)).2.2.1 = 0) ∨
-    ∃ c', TM0.step M ⟨q, T⟩ = some c' ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-      (idx Λ c'.q : ℕ) = (tr M q (T.nth 0)).2.1 ∧ ∀ j r, symFlag c'.Tape j r ↔ moved M q T j r := by
+    (TM0.step M ⟨q, T⟩ = none ∧ (tr M q (T.nth 0)).go = 0) ∨
+    ∃ c', TM0.step M ⟨q, T⟩ = some c' ∧ (tr M q (T.nth 0)).go = 1 ∧
+      (idx Λ c'.q : ℕ) = (tr M q (T.nth 0)).next ∧ ∀ j r, symFlag c'.Tape j r ↔ moved M q T j r := by
   rcases h : M q T.head with _ | ⟨q', d | b⟩
   · left; simp [TM0.step, tr, h]
   · right; cases d
@@ -391,8 +419,7 @@ def cfgFlags (c : TM0.Cfg Γ Λ) (j : ℤ) (r : ℕ) : Prop :=
   symFlag c.Tape j r ∨ j = 0 ∧ (r = stateOff M (idx Λ c.q) ∨ r = runOff M)
 
 theorem iterate (q : Λ) (T : Tape Γ) (t : Tape Cell) (ht : Holds (width M) (runOff M) (cfgFlags M ⟨q, T⟩) t) :
-    ∃ u, Holds (width M) (runOff M) (fun j r ↦ moved M q T j r ∨ j = 0 ∧ (tr M q (T.nth 0)).2.2.1 = 1 ∧
-        (r = stateOff M ((tr M q (T.nth 0)).2.1) ∨ r = off M 5)) u ∧
+    ∃ u, Holds (width M) (runOff M) (committed M q T) u ∧
       Reaches₁ step ⟨.loop (loopBody M) :: shift (-↑(runOff M)), t⟩ ⟨.loop (loopBody M) :: shift (-↑(runOff M)), u⟩ := by
   have h1 : cfgFlags M ⟨q, T⟩ 0 (runOff M) := Or.inr ⟨rfl, Or.inr rfl⟩
   obtain ⟨u, hu, r⟩ := ((((Spec.dec (d := 0) (o := runOff M) (by simp) (by simp [width, runOff]) h1).seq
@@ -430,7 +457,7 @@ theorem respects : Respects (TM0.step M) step (Tr M) := by
   · rcases h with ⟨h, -⟩ | ⟨-, t, ht, rfl⟩
     · simp [hs] at h
     obtain ⟨u, hu, r⟩ := iterate M q T t ht
-    obtain ⟨c₂, h, r'⟩ := loop_spec M c' u (hu.congr fun j r _ ↦ by simp only [cfgFlags, hT, hq, hc, runOff, off, true_and])
+    obtain ⟨c₂, h, r'⟩ := loop_spec M c' u (hu.congr fun j r _ ↦ by simp only [cfgFlags, committed, hT, hq, hc, runOff, off, true_and])
     exact ⟨c₂, h, r.trans_left r'⟩
 
 def enc (a : Γ) : List Cell := (List.range (width M)).map fun i ↦ if i + 1 = (idx Γ a : ℕ) then 1 else 0
