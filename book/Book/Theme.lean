@@ -58,6 +58,25 @@ def darkVars : String := r#"
     --verso-tactic-state-border-color: #555b66;
     --verso-tactic-toggle-color: #666b75;
     --verso-tactic-toggle-checked-color: #8a909b;
+
+    --bf-accent: #8ea6ff;
+    --bf-accent-2: #f0a35e;
+    --bf-heading: #b4c3ff;
+    --bf-code-bg: #1d2027;
+    --bf-code-border: #2f343e;
+    --bf-inline-bg: #262a33;
+    --bf-output-edge: #4fbf8a;
+    --bf-tok-keyword: #c792ea;
+    --bf-tok-const: #82aaff;
+    --bf-tok-var: #f6b26b;
+    --bf-tok-literal: #a5d6a7;
+    --bf-tok-sort: #f07178;
+    --bf-tok-comment: #7f8796;
+    --bf-tok-punct: #9aa3b2;
+    --bf-bf-inc: #7fd17f;
+    --bf-bf-dec: #ff8a80;
+    --bf-bf-move: #82aaff;
+    --bf-bf-loop: #d59cff;
 "#
 
 /-- Rules that Verso writes with literal colors, rewritten in terms of the variables. -/
@@ -76,8 +95,69 @@ $ a:visited { color: var(--bf-link-visited-color); }
 $ #toc a, $ #toc a:visited, $ .header-title, $ .header-title:visited { color: var(--verso-text-color); }
 "#
 
+/-- The light palette (the dark one is part of `darkVars`) and the styles that use it. -/
+def style : String := r#"
+:root {
+  --bf-accent: #3451b2;
+  --bf-accent-2: #d9822b;
+  --bf-heading: #22357a;
+  --bf-code-bg: #f6f7fb;
+  --bf-code-border: #e1e5ef;
+  --bf-inline-bg: #eef1f8;
+  --bf-output-edge: #2f9e6b;
+  --bf-tok-keyword: #8a2bb8;
+  --bf-tok-const: #1d5fc4;
+  --bf-tok-var: #a8520e;
+  --bf-tok-literal: #127a50;
+  --bf-tok-sort: #c2185b;
+  --bf-tok-comment: #6b7280;
+  --bf-tok-punct: #5b6472;
+  --bf-bf-inc: #1f8a3b;
+  --bf-bf-dec: #c62828;
+  --bf-bf-move: #1d5fc4;
+  --bf-bf-loop: #8a2bb8;
+}
+
+/* Reading comfort */
+main p, main li { line-height: 1.65; }
+
+/* Headings: chapter titles underlined in the accent color, sections with a side bar. */
+main h1 { color: var(--bf-heading); border-bottom: 3px solid var(--bf-accent); padding-bottom: 0.3rem; }
+main h2 { color: var(--bf-heading); border-left: 4px solid var(--bf-accent-2); padding-left: 0.6rem; margin-top: 2rem; }
+main h3, main h4 { color: var(--bf-accent); }
+header .header-title h1 { color: var(--bf-accent); }
+
+/* Code blocks: a tinted panel with an accent edge; Lean's output with a green edge. */
+main code.hl.lean.block, main pre {
+  display: block; background: var(--bf-code-bg); border: 1px solid var(--bf-code-border);
+  border-left: 3px solid var(--bf-accent); border-radius: 6px; padding: 0.7rem 0.9rem; overflow-x: auto;
+}
+main pre.hl.lean.lean-output { border-left-color: var(--bf-output-edge); margin-top: -0.4rem; }
+
+/* Inline code as a soft chip. */
+main :not(pre) > code:not(.block) {
+  background: var(--bf-inline-bg); padding: 0.05em 0.35em; border-radius: 4px;
+}
+
+/* Lean syntax colors (Verso marks every token with its kind). */
+.hl.lean .keyword.token { color: var(--bf-tok-keyword); font-weight: 600; }
+.hl.lean .const.token, .hl.lean .module-name.token { color: var(--bf-tok-const); }
+.hl.lean .var.token, .hl.lean .level-var.token { color: var(--bf-tok-var); }
+.hl.lean .literal.token { color: var(--bf-tok-literal); }
+.hl.lean .sort.token { color: var(--bf-tok-sort); }
+.hl.lean .comment.token, .hl.lean .doc-comment.token { color: var(--bf-tok-comment); font-style: italic; }
+.hl.lean .punctuation.token, .hl.lean .delim.token { color: var(--bf-tok-punct); }
+
+/* Brainfuck snippets (see `js`): adds, subtracts, moves, loops. */
+.bf-c-inc { color: var(--bf-bf-inc); font-weight: 600; }
+.bf-c-dec { color: var(--bf-bf-dec); font-weight: 600; }
+.bf-c-move { color: var(--bf-bf-move); }
+.bf-c-loop { color: var(--bf-bf-loop); font-weight: 700; }
+"#
+
 /-- The full stylesheet: explicit choice first, then the OS preference when no choice is stored. -/
 def css : String :=
+  style ++
   ":root[data-theme=\"dark\"] {" ++ darkVars ++ "}\n" ++
   darkRules "html[data-theme=\"dark\"]" ++
   "@media (prefers-color-scheme: dark) {\n" ++
@@ -121,8 +201,41 @@ def js : String := r#"
     label();
     header.appendChild(b);
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addToggle);
-  else addToggle();
+  // Color Brainfuck snippets in prose: inline code made only of BF instructions.
+  var KIND = { "+": "inc", "-": "dec", "<": "move", ">": "move", "[": "loop", "]": "loop" };
+  function colorBF() {
+    document.querySelectorAll("main code:not(.hl)").forEach(function (c) {
+      var t = c.textContent;
+      if (!/^[+\-<>\[\]\s]+$/.test(t) || !/[+\-<>\[\]]/.test(t) || c.children.length) return;
+      c.textContent = "";
+      for (var i = 0; i < t.length; i++) {
+        var k = KIND[t[i]];
+        if (!k) { c.appendChild(document.createTextNode(t[i])); continue; }
+        var s = document.createElement("span");
+        s.className = "bf-c-" + k; s.textContent = t[i]; c.appendChild(s);
+      }
+    });
+  }
+  // Keyboard: ⌘K / Ctrl+K focuses the search box.
+  function focusSearch() {
+    var input = document.getElementById("cb1-input");
+    if (!input) return;
+    input.focus();
+    var sel = window.getSelection(), range = document.createRange();
+    range.selectNodeContents(input); sel.removeAllRanges(); sel.addRange(range);
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+    if (e.key.toLowerCase() === "k") { e.preventDefault(); focusSearch(); }
+  });
+  function hints() {
+    var mac = /Mac|iPhone|iPad/.test(navigator.platform), mod = mac ? "⌘" : "Ctrl+";
+    var input = document.getElementById("cb1-input");
+    if (input) input.title = "Search (" + mod + "K)";
+  }
+  function init() { addToggle(); colorBF(); hints(); setTimeout(hints, 500); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
 "#
 

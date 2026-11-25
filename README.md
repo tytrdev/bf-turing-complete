@@ -2,6 +2,8 @@
 
 A Lean 4 + Mathlib proof that Brainfuck simulates every finite Turing machine.
 
+> **Built with Claude.** This project was made with heavy use of Claude, Anthropic's AI model, through Claude Code: Claude wrote most of the Lean proofs, the book and its simulators, under Ty Tracey's direction, and every commit is co-authored by it. The proofs don't rest on trusting either of us: Lean checks them, and the two files that say what is being proved and what Brainfuck does (`Core/Statement.lean`, `Core/Basic.lean`) are short enough to read. The book's prose and the simulators are not checked by Lean; the simulators are tested against Lean's own runs.
+
 The statement is `BF.Claim` in [`Core/Statement.lean`](BfTuringComplete/Core/Statement.lean). For every finite Mathlib `TM0.Machine` there is
 - an injective, fixed-width block code for its symbols that sends the blank to zero cells, and
 - a Brainfuck program,

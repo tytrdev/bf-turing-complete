@@ -50,6 +50,14 @@ checks that the in-page interpreter reproduces Lean's run of the example exactly
 and the tape at every phase boundary). When you press a "Run Brainfuck" button, the page compares
 its result with Lean's and shows ✓ when they agree.
 
+# How this was made
+
+This project was built with heavy use of Claude, Anthropic's AI model: Claude wrote most of the Lean
+proofs, this book and its simulators, under Ty Tracey's direction. That is exactly the situation
+this chapter is about. You don't need to trust whoever wrote the proof, human or AI, because Lean
+checks it; you need to read the short definitions above and decide whether they say what you think
+they say. The parts Lean does not check, the prose and the simulators, deserve the usual skepticism.
+
 # Checking it yourself
 
 With Lean installed, clone the repository and run `lake build`. If it finishes without errors, the

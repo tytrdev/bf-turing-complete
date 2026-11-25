@@ -138,7 +138,8 @@
       tapeView.innerHTML = "";
       if (!m) return;
       m.code.forEach((ins, i) => {
-        const s = el("span", "bf-op" + (i === m.pc ? " bf-pc" : ""), ins.op);
+        const kind = { "+": "inc", "-": "dec", "<": "move", ">": "move", "[": "loop", "]": "loop" }[ins.op];
+        const s = el("span", "bf-op bf-c-" + kind + (i === m.pc ? " bf-pc" : ""), ins.op);
         codeView.appendChild(s);
       });
       if (m.halted()) codeView.appendChild(el("span", "bf-op bf-pc", "■"));

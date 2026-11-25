@@ -3,7 +3,7 @@ import VersoManual
 /-!
 # Interactive widgets
 
-`sim/sim.js` holds a Brainfuck interpreter (tested against Lean's own runs by `test/golden.mjs`)
+`sim/sim.js` (loaded by `Main` when the book is generated) holds a Brainfuck interpreter (tested against Lean's own runs by `test/golden.mjs`)
 and two widgets; this module gives the book code blocks that place them on a page.
 
 * ` ```bfPlayground ` with the program as its body: an editable Brainfuck playground.
@@ -84,9 +84,6 @@ def predict : CodeBlockExpanderOf Unit
     let html := s!"<details class=\"bf-predict\"><summary><strong>Pause and predict.</strong> {esc q}</summary>" ++
       s!"<p>{esc a.trimAscii.toString}</p></details>"
     ``(Verso.Doc.Block.other (Block.rawHtml $(quote html)) #[])
-
-/-- The simulators' script, read from `sim/sim.js` when the book is built. -/
-def js : String := include_str "../sim/sim.js"
 
 /-- Styles for the widgets, in terms of Verso's (and the dark theme's) color variables. -/
 def css : String := r#"

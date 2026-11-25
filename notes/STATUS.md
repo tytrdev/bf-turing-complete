@@ -138,7 +138,7 @@ each bit a binary block" (`compose`). 2,128 tokens with docs; built by `lake bui
   chapters). URLs `/tour/...` and `/proof/...` (`file :=` metadata).
 - Widgets (`book/Book/Widgets.lean`, a raw-HTML `block_extension` plus code blocks): ```` ```bfPlayground ````
   (editable program, optional `input:` line) and ```` ```bfPlayer ```` (path to an exported trace).
-  JS in `book/sim/sim.js` (pulled in with `include_str`), styles use Verso's color variables (dark mode works).
+  JS in `book/sim/sim.js` (read by `Main` at generation time), styles use Verso's color variables (dark mode works).
 - Truthfulness: Lean produces the data, JS animates it. `scripts/ExportTrace.lean` (run from the root)
   writes `book/data/swap-trace.json` from the real compiled program. `book/test/golden.mjs` (node) checks the JS
   interpreter reproduces Lean's run exactly: 13 passes, 9709 steps, tape and pointer at every pass. In the page,
@@ -153,3 +153,9 @@ each bit a binary block" (`compose`). 2,128 tokens with docs; built by `lake bui
 - CI (`.github/workflows/book.yml`): regenerates the trace and fails if `book/data` differs, runs the golden test
   (13 passes, 48 phase starts, 9709 steps), then builds the book.
 - Preview locally: `cd book && lake exe book`, then serve `_out/html-multi` (e.g. `python3 -m http.server --directory _out/html-multi`).
+- `book/sim/sim.js` is read by `book/Main.lean` when `lake exe book` runs (not `include_str`: Lake doesn't track
+  included files and rebuilds by content hash, so an edited script silently stayed stale in the olean).
+- Styling (2026-11-25): `Book/Theme.lean` has a light palette (`style`) and dark overrides (`darkVars`): Lean token
+  colors keyed to Verso's token classes, accent headings, tinted code panels, inline-code chips, colored BF snippets
+  (inline code made only of `+-<>[]`). Shortcuts: ⌘/Ctrl+B toggles the table of contents (remembered on desktop),
+  ⌘/Ctrl+K focuses search.
