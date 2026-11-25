@@ -18,7 +18,7 @@ def files(d):
     return [f for f in sorted((ROOT / d).rglob("*.lean")) if "Test" not in f.name]
 
 print(f"{'version':<11} {'chars':>8} {'tokens':>8}")
-for d in ["Reference", "Golf", "Exposition", "Elegant"]:
+for d in ["Reference", "Golf", "Exposition", "Elegant", "Binary"]:
     if not (ROOT / d).is_dir():
         continue
     text = "".join(f.read_text() for f in files(d))
