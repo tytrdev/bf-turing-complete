@@ -1,7 +1,9 @@
 import VersoManual
+import Book.Widgets
 
 open Verso.Genre Manual
 open Verso.Code.External
+open Book.Widgets
 
 set_option pp.rawOnError true
 set_option verso.exampleProject "../"
@@ -66,3 +68,22 @@ These checks run every time the project builds:
 #guard bfOutput [2, 2, 1, 1] = tmOutput [2, 2, 1, 1]
 #guard bfOutput [] = tmOutput []
 ```
+
+# Watch it run
+
+Below is the same machine on input `1 2 2`, next to its Brainfuck program. The top row is the
+Turing machine's tape, with the head outlined. Underneath, each column is one block of 18 Brainfuck
+cells, one cell per flag (the legend gives the order): a colored cell holds 1, an empty one holds 0.
+The outlined block is where the machine's head is.
+
+*Next* and *Prev* jump between the moments when the program is at the top of its main loop, which is
+exactly once per machine step. *Run Brainfuck to next step* runs the real program, instruction by
+instruction, in your browser, from one of those moments to the next, and then compares the tape
+with the one Lean computed.
+
+```bfPlayer
+data/swap-trace.json
+```
+
+The whole run takes 9709 Brainfuck steps for 11 machine steps.
+

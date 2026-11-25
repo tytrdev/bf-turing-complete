@@ -32,6 +32,13 @@ jobs:
         run: |
           lake exe cache get
           lake build BfTuringComplete.Exposition.Example
+      - name: Check the simulators' trace is what Lean computes
+        run: |
+          lake env lean scripts/ExportTrace.lean
+          git diff --exit-code book/data
+      - name: Test the in-page interpreter against Lean's run
+        working-directory: book
+        run: node test/golden.mjs
       - name: Build the book
         working-directory: book
         run: lake exe book

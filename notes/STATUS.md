@@ -104,3 +104,52 @@ Possible further polish: `eval_eq` (Part.ext with `tr_eval`/`tr_eval_rev`, ~400 
   CSS variables plus the few hardcoded colors in `book.css`; follows the OS setting, with a header button
   cycling auto/light/dark (stored in `localStorage`). Verso's search box is absolutely positioned at the
   header's right edge, so the button carries a right margin of `--search-bar-width`.
+
+## Mathlib fingerprint pass over Elegant (2026-11-25)
+Run: fingerprint tool rebuilt for v4.36.0 (`lean-explorer/corpus/tools/fingerprint436`), all of Mathlib + this
+project in one run (`corpus/data/bf/folded.jsonl`); `corpus/tools/reprove/Triage.lean` tries each Elegant theorem's
+statement with rfl/simp/omega/aesop/grind/exact? (rejecting proofs that use the theorem itself).
+- Term-level matches with Mathlib: only compiler output (equation lemmas, omega certificates).
+- Triage of 60 Elegant theorems: `card_pos` is `Fintype.card_pos`; the `den_*` equations and `compile_when`
+  are one-line `simp`/`aesop`; the other 48 need their proofs.
+- Shared-premise search finds nothing useful: our premises are generic glue.
+- What matters (found by reading Mathlib, not by the fingerprints): `Turing.TM0to1` (TM0 -> TM1) and
+  `Turing.TM1to1` (TM1 over Γ -> TM1 over Bool, symbols as fixed-width bit blocks with
+  `enc default = replicate n false`, i.e. our BlockCode conditions). A version where BF only simulates
+  *binary TM1* would drop the whole symbol layer (one-hot symbol flags, symbol dispatch, pending-symbol
+  flush) and leave states, one bit read/write, and moves.
+
+## Binary reduction (2026-11-25): `Binary/Reduce.lean`
+`BF.Binary.claim_of_binary : BinaryClaim.{max u v} → Claim.{u, v}` is proven (axioms: propext, Classical.choice,
+Quot.sound): if BF simulates every finite TM0 over `Bool`, it simulates every finite TM0. Chain:
+`TM0to1` → `TM1to1` (symbols as bit blocks via `exists_enc_dec`) → `TM1to0` → restrict to the reachable
+states (`TM0.Machine.map` onto `{q // q ∈ insert default S}`); the block code for Γ is "bits of the symbol,
+each bit a binary block" (`compose`). 2,128 tokens with docs; built by `lake build` (imported from the root).
+- About 1,180 of those tokens are generic and missing from Mathlib: an `eval` lemma along any `Respects`
+  across universes (`eval_map`), `TM0to1` eval + finiteness, `TM1to1` eval, eval after restricting to a support.
+  BF-specific part: about 940 (statement, `compose`, final chain).
+- Verdict: a Bool-only compiler would save less than the reduction costs. Elegant's symbol handling is
+  already generic (`all fun a ↦ ...`), so fixing Γ = Bool trims a few hundred tokens, not a layer.
+  The reduction is still a clean, readable module, and the generic part is a Mathlib contribution candidate.
+
+## Book: two parts and simulators (2026-11-25)
+- One book, two parts: *Part I. The Tour* (`book/Book/Tour.lean`, for programmers with no background; so far
+  chapter 1, "Brainfuck in Five Minutes") and *Part II. The Proof* (`book/Book/Proof.lean`, the four existing
+  chapters). URLs `/tour/...` and `/proof/...` (`file :=` metadata).
+- Widgets (`book/Book/Widgets.lean`, a raw-HTML `block_extension` plus code blocks): ```` ```bfPlayground ````
+  (editable program, optional `input:` line) and ```` ```bfPlayer ```` (path to an exported trace).
+  JS in `book/sim/sim.js` (pulled in with `include_str`), styles use Verso's color variables (dark mode works).
+- Truthfulness: Lean produces the data, JS animates it. `scripts/ExportTrace.lean` (run from the root)
+  writes `book/data/swap-trace.json` from the real compiled program. `book/test/golden.mjs` (node) checks the JS
+  interpreter reproduces Lean's run exactly: 13 passes, 9709 steps, tape and pointer at every pass. In the page,
+  "Run Brainfuck to next step" runs the program live and compares with Lean's tape (shows ✓).
+- Tour, 8 chapters: Brainfuck in five minutes (playgrounds); Turing machines (`tmStepper`); What we claim (the full
+  `Core/Statement.lean` via Verso's `module` block, checked against the source); Spelling a tape (`encoding`); A tiny
+  language of flags (playgrounds of compiled flag programs); One step in four phases (`bfPhases`, each phase run live
+  and checked against Lean's tape at that moment); The whole run (`bfPlayer`); What Lean checked and what you trust.
+  "Pause and predict" fold-outs (```` ```predict ````: first line question, rest answer).
+- Phase boundaries in the trace: the code left to run is not enough on its own (just after a `when` body, the code
+  left equals `mv (pos f) ++ [loop ..] ++ ..` again), so phases are matched in order after each loop top.
+- CI (`.github/workflows/book.yml`): regenerates the trace and fails if `book/data` differs, runs the golden test
+  (13 passes, 48 phase starts, 9709 steps), then builds the book.
+- Preview locally: `cd book && lake exe book`, then serve `_out/html-multi` (e.g. `python3 -m http.server --directory _out/html-multi`).

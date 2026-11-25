@@ -1,6 +1,7 @@
 import VersoManual
 import Book
 import Book.Theme
+import Book.Widgets
 
 open Verso Doc
 open Verso.Genre Manual
@@ -10,7 +11,7 @@ def config : RenderConfig where
   emitHtmlSingle := .no
   emitHtmlMulti := .immediately
   htmlDepth := 2
-  extraCss := {(Book.Theme.css : CSS)}
-  extraJs := {(Book.Theme.js : JS)}
+  extraCss := {(Book.Theme.css : CSS), (Book.Widgets.css : CSS)}
+  extraJs := {(Book.Theme.js : JS), (Book.Widgets.js : JS)}
 
 def main := manualMain (%doc Book) (config := config)
